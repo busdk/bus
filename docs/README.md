@@ -2,7 +2,7 @@
 
 Bus models an organization as **tenant-scoped Units** (teams, projects, infra, vendors, etc.) that **provide and consume Services** under explicit **relationships/contracts**. As services are used, Bus records the activity as **append-only, ledger-like transactions** (debits/credits between units), so balances can be reconciled and later settled (e.g., via generated invoices or exports to external accounting systems).
 
-Unlike a traditional DB-first tool, Bus keeps **schemas and workspace config in a Git workspace**: changes are reviewable, mergeable, and auditable as commits. It starts **CLI-first (script/agent friendly)** and is designed to later expose the same core via a REST API, without moving feature logic into the core. Internal mutable state is **pluggable** (filesystem `.bus/` or a database backend). Over time, Bus can also serve as a foundation for **operational automation** by attaching tasks/playbooks to units and services (while handling sensitive values as protected “secret” fields).
+Unlike a traditional DB-first tool, Bus keeps **schemas and workspace config in a Git workspace**: changes are reviewable, mergeable, and auditable as commits. It starts **CLI-first (script/agent friendly)** and is designed to later expose the same core via a REST API, without moving feature logic into the core. Internal mutable state is managed behind an extendable **`StateBackend` interface**, with multiple built-in implementations (e.g. filesystem `.bus/` or a database backend) that are **selected at runtime via config**. Over time, Bus can also serve as a foundation for **operational automation** by attaching tasks/playbooks to units and services (while handling sensitive values as protected “secret” fields).
 
 ## Roadmap
 
@@ -83,7 +83,7 @@ Minor version “milestones” group related patches; patch steps are still auth
 - [Locking + atomic writes](spec/locking-and-atomic-writes.md)
 - [Schemas](spec/schemas.md)
 - [Units](spec/units.md)
-- [Internal state storage (pluggable)](spec/state-storage.md)
+- [Internal state storage (runtime-selectable backend)](spec/state-storage.md)
 - [Filesystem state backend (`.bus/`)](spec/state-backend-dotbus.md)
 - [Database state backend](spec/state-backend-database.md)
 - [Relations](spec/relations.md)
