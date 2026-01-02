@@ -17,6 +17,8 @@ The first usable version (v1) of Bus CLI aims to:
 
 ## Core Concepts
 
+Bus provides an underlying representation (units + schemas + relations + an append-only ledger) that can support multiple accounting and costing approaches (including ABC), rather than imposing a single method.
+
 ### Units
 
 Units are instances of schemas. Each unit has:

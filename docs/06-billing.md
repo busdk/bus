@@ -11,6 +11,8 @@ This keeps v1 simpler: Bus is a schema-driven unit store. Billing is a **domain 
 
 For micropayments between services/business units, Bus v1 focuses on capturing a normalized **transaction ledger** and reporting over it (settlement/invoicing is future). See `17-micropayments.md`.
 
+Activity-based costing (ABC) is a well-known costing methodology that models **activities** and uses **cost drivers** to allocate overhead/indirect costs. Bus is **not** “ABC”, but it can represent the entities and events you’d need to implement ABC as a layer using the same schema pattern: activities can be units (or a schema), cost pools/resources can be units, cost driver measurements can be units (or derived reports over units), and allocations/chargebacks can be represented as transactions posted into the ledger.
+
 ## Minimal Model: `Account` + `Transaction`
 
 The simplest practical billing/ledger model is:
