@@ -7,10 +7,10 @@ Unlike a traditional DB-first tool, Bus keeps **schemas and workspace config in 
 ## Start here
 
 - **Docs entry point**: `docs/README.md`
-- **Roadmap start (authoritative)**: `docs/roadmap/0.0.0.md`
+- **Roadmap start (authoritative)**: `docs/roadmap/0.0.1.md`
 
 The design is written as an ordered sequence of small SemVer increments:
-- `docs/roadmap/0.0.0.md`, `docs/roadmap/0.0.1.md`, …
+- `docs/roadmap/0.0.1.md`, `docs/roadmap/0.0.2.md`, …
 - Each version file is one implementable increment with acceptance criteria.
 
 ## Core principles (short form)
