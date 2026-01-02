@@ -7,7 +7,7 @@ This directory contains documentation for Bus CLI v1, organized by topic.
 1. **[Overview](01-overview.md)** - Introduction, goals, and core concepts
 2. **[Constraints](02-constraints.md)** - Non-negotiable design constraints
 3. **[Workspace Structure](03-workspace-structure.md)** - Files and directory organization
-4. **[Manifest](04-manifest.md)** - `bus.yml` format and structure
+4. **[Manifest](04-manifest.md)** - `bus.{yml,yaml,toml,json}` format and structure
 5. **[Schemas](05-schemas.md)** - Schema file format, property types, and attributes
 6. **[Billing](06-billing.md)** - Billing / ledger as schema patterns (no built-in billing engine)
 7. **[Units](07-units.md)** - Unit storage format and operations
@@ -19,6 +19,9 @@ This directory contains documentation for Bus CLI v1, organized by topic.
 13. **[Architecture](13-architecture.md)** - Internal Go architecture and interfaces
 14. **[Examples](14-examples.md)** - Example workflows and usage
 15. **[Limitations](15-limitations.md)** - What v1 does not do
+16. **[Multi-Format Storage](16-multi-format-storage.md)** - YAML/TOML/JSON storage and extensible codec architecture
+17. **[Micropayments](17-micropayments.md)** - Microtransaction ledger, integrity, and future settlement extensions
+18. **[x402](18-x402.md)** - x402 capture mechanism spec and wire formats
 
 ## Quick Start
 

@@ -1,6 +1,8 @@
 # Unit Instance Storage
 
-Units are instances of schemas. Each unit is stored as a separate YAML file.
+Units are instances of schemas. Each unit is stored as a separate document file (YAML/TOML/JSON).
+
+Format is selected deterministically for newly created records and preserved on rewrite (see `16-multi-format-storage.md`).
 
 ## Storage Locations
 
@@ -11,11 +13,13 @@ Units are instances of schemas. Each unit is stored as a separate YAML file.
 * Used for fast lookup
 
 ### Unit File
-`.bus/units/<schemaName>/<primaryId>.yml`
+`.bus/units/<schemaName>/<primaryId>.<ext>`
 * Individual unit record
 * Filename matches the primary ID
 
 ## Unit File Format
+
+The example below uses YAML for readability.
 
 ```yaml
 kind: bus.unit
@@ -39,7 +43,7 @@ data:
 * **MUST** be `1` in v1
 
 #### `schema`
-* **MUST** match a schema registered in `bus.yml`
+* **MUST** match a schema registered in the manifest
 * Identifies which schema this unit conforms to
 
 #### `data`

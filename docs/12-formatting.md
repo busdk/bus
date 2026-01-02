@@ -2,9 +2,17 @@
 
 To be Git-friendly and reduce conflicts, Bus must emit files in a deterministic format.
 
+Bus v1 supports multiple document formats (YAML/TOML/JSON). Each supported codec MUST produce stable, readable output (see `16-multi-format-storage.md`).
+
+## Comments and Round-Trip
+
+Comment preservation is **not required** in v1.
+
+If Bus rewrites a YAML/TOML file, comments may be lost. This MUST be documented clearly by the tool and reflected in user expectations.
+
 ## YAML Emission
 
-YAML emission must be deterministic:
+YAML emission MUST be deterministic:
 
 ### Stable Field Ordering
 * Fields must always appear in the same order
@@ -22,9 +30,22 @@ YAML emission must be deterministic:
 * Consistent null representation (`null`, not `~` or empty)
 
 ### Avoid Timestamps in Deterministic Records
-* Do not write timestamps into deterministic records
-* Especially important for transaction generation
-* If timestamps are needed, they should be in metadata, not in deterministic data
+* Avoid writing “current time” into **deterministically generated** records where re-running should produce identical bytes
+* For captured events (e.g., transaction capture), timestamps like `createdAt` are expected and are part of the event record
+
+## JSON Emission
+
+JSON emission MUST be deterministic:
+- Pretty-printed (stable indentation)
+- Stable key ordering (deterministic map ordering)
+- Newline at EOF
+
+## TOML Emission
+
+TOML emission MUST be deterministic:
+- Stable key ordering within tables
+- Avoid emitter behavior that reorders keys unpredictably
+- Prefer simple TOML constructs that round-trip cleanly to the canonical model
 
 ## `.ids` Files
 
@@ -70,11 +91,12 @@ YAML emission must be deterministic:
 
 ## Implementation Notes
 
-### YAML Library
-* Use a YAML library that supports:
-  * Custom field ordering
-  * Consistent quoting
-  * Deterministic output
+### Codec Libraries
+
+Use libraries/emitters that support deterministic output for each codec:
+- Stable key ordering
+- Stable quoting/escaping rules
+- Control over indentation/newlines
 
 ### Sorting
 * Sort IDs before writing to `.ids` files
@@ -83,6 +105,13 @@ YAML emission must be deterministic:
 
 ### Testing
 * Test that same inputs produce identical outputs
+* Test parse-equivalence across YAML/TOML/JSON for the same logical content
 * Test that formatting is stable across runs
 * Test that merges work correctly
+
+## Canonical Serialization (Integrity)
+
+If Bus computes hashes or signatures for integrity/verification, it MUST define a canonical serialization for the payload being hashed/signed.
+
+Canonicalization MUST be independent of the source file format to avoid “same data, different bytes” problems across YAML/TOML/JSON.
 

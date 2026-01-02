@@ -9,6 +9,8 @@ If you want “billing”, you model it using the same primitives as everything 
 
 This keeps v1 simpler: Bus is a schema-driven unit store. Billing is a **domain model you define**.
 
+For micropayments between services/business units, Bus v1 focuses on capturing a normalized **transaction ledger** and reporting over it (settlement/invoicing is future). See `17-micropayments.md`.
+
 ## Minimal Model: `Account` + `Transaction`
 
 The simplest practical billing/ledger model is:

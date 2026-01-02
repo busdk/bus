@@ -1,12 +1,16 @@
 # Schema File Format
 
-Schemas define the structure of units. They are YAML documents stored adjacent to `bus.yml` by default.
+Schemas define the structure of units. They are document files (YAML/TOML/JSON) stored adjacent to the manifest (`bus.{yml,yaml,toml,json}`) by default.
+
+Format is detected by file extension and preserved on rewrite (see `16-multi-format-storage.md`).
 
 ## Schema Kind
 
 The schema kind is **always** `bus.schema`.
 
 ## Core Schema Fields
+
+The examples below use YAML for readability, but the same logical schema can be expressed in TOML or JSON.
 
 ```yaml
 kind: bus.schema
@@ -44,7 +48,7 @@ properties:
 * **MUST** be `1` in v1
 
 #### `name`
-* Schema name (must match the name in `bus.yml`)
+* Schema name (must match the name in the manifest)
 
 #### `properties`
 * Array of property definitions
@@ -94,6 +98,10 @@ Supported property types:
 ### `date`
 * `YYYY-MM-DD` format
 * Example: `"2026-01-01"`
+
+### `timestamp`
+* RFC 3339 / ISO 8601 date-time string (UTC recommended)
+* Example: `"2026-01-02T12:00:00Z"`
 
 ### `ref:<SchemaName>`
 * Reference to another unit's **primary ID**

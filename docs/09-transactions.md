@@ -12,7 +12,7 @@ A “transaction” is simply a **unit** in a schema you define (often named `tr
 * You can encode this intent directly in the schema via `operations` (see [Schemas](05-schemas.md)).
 
 ### Schema-Defined
-* You define the structure, references, and constraints in YAML.
+* You define the structure, references, and constraints in schemas (YAML/TOML/JSON).
 * Bus enforces schema validation and uniqueness, but does not interpret “billing rules”.
 
 ## Recommended Minimal Schema
@@ -60,9 +60,13 @@ Notes:
 
 Transaction units are stored like any other unit:
 * Index: `.bus/units/transaction.ids`
-* Records: `.bus/units/transaction/<id>.yml`
+* Records: `.bus/units/transaction/<id>.<ext>`
 
 Bus does not maintain special month indexes in v1. If you want derived indexes or reports, build them outside Bus from the unit files.
+
+## Micropayments
+
+For micropayments, Bus treats the primary ledger entry as a normalized **transaction** record between business units (see `17-micropayments.md`). x402 is one HTTP capture mechanism for recording those transactions (see `18-x402.md`).
 
 ## Optional: Stable / Deterministic IDs
 

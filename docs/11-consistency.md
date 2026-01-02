@@ -49,7 +49,7 @@ For operations that write multiple files (schema init, unit add, tx update):
    * Transaction files
    * Schema files
 
-3. **Then rewrite affected `.ids` files and `bus.yml` last** (also atomic rename)
+3. **Then rewrite affected `.ids` files and the manifest last** (also atomic rename)
    * Index files are the "commit point"
    * Manifest is updated last
 
@@ -71,7 +71,7 @@ When creating a unit:
 1. **Acquire lock** (`.bus/lock`)
 2. **Validate input** (check schema, uniqueness, etc.)
 3. **Generate primary ID** (if needed)
-4. **Write unit file** (`.bus/units/<schema>/<id>.yml.tmp` → rename)
+4. **Write unit file** (`.bus/units/<schema>/<id>.<ext>.tmp` → rename)
 5. **Update index** (`.bus/units/<schema>.ids.tmp` → rename)
 6. **Release lock**
 
@@ -84,8 +84,8 @@ When creating a schema:
 
 1. **Acquire lock**
 2. **Validate schema** (check properties, primary ID, etc.)
-3. **Write schema file** (`<schemaName>.yml.tmp` → rename)
-4. **Update manifest** (`bus.yml.tmp` → rename)
+3. **Write schema file** (`<schemaName>.<ext>.tmp` → rename)
+4. **Update manifest** (`bus.<ext>.tmp` → rename)
 5. **Release lock**
 
 If step 3 fails: no changes made

@@ -11,8 +11,9 @@ The first usable version (v1) of Bus CLI aims to:
 * Write **deterministic**, merge-friendly files
 * Never leave the repository in an inconsistent state (atomic operations)
 * **Not** perform Git operations itself (Git is "outside" the tool)
-* Store user-facing schema definitions next to `bus.yml` by default
+* Store user-facing schema definitions next to the manifest (`bus.{yml,yaml,toml,json}`) by default
 * Store all mutable state under `.bus/`
+* Support a **transaction ledger** for micropayment capture and reporting (settlement is future)
 
 ## Core Concepts
 

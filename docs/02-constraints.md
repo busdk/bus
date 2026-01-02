@@ -16,9 +16,9 @@ Git is considered "outside" the tool. Users manage Git themselves.
 
 **Bus MUST NOT** create or rely on directories like `schemas/` or `units/` at the top level.
 
-* By default, schema files are adjacent to `bus.yml` in the current working directory
+* By default, schema files are adjacent to the **manifest** in the current working directory
 * Users may choose another structure via `--path` flags
-* Bus stores those paths in `bus.yml`
+* Bus stores those paths in the manifest (`bus.{yml,yaml,toml,json}`)
 
 ## 3. Only `.bus/` is Controlled Structure
 
@@ -28,11 +28,12 @@ Bus may create `.bus/` and subdirectories under it for its own state:
 
 All Bus-managed mutable state lives under `.bus/`.
 
-## 4. `bus.yml` is in Current Working Directory
+## 4. Manifest is in Current Working Directory
 
 For v1, commands operate on the current directory only:
-* `bus init` creates `./bus.yml`
-* Other commands require `./bus.yml` to exist
+* `bus init` creates a manifest in `./` (default: `./bus.yml`)
+* Other commands require exactly one manifest candidate to exist:
+  * `bus.yml`, `bus.yaml`, `bus.toml`, or `bus.json`
 
 ## 5. Schema-Driven Units with Primary ID
 
@@ -56,7 +57,9 @@ v1 includes:
 * **Basic relations** between entities (typed references)
 * A **schema-driven unit store** (units are the only primitive data record)
 
-Bus v1 does **not** include built-in billing rules, recurring generation, or transaction-specific commands.
+Bus v1 does **not** include built-in billing automation rules (scheduled charging, auto-invoicing) or a special “billing engine”.
 
-If you want an append-only ledger, define your own `transaction` schema and treat it as **create-only** (corrections are new transactions, not edits).
+If you want a general-purpose append-only ledger, define your own `transaction` schema and treat it as **create-only** (corrections are new transactions, not edits).
+
+Micropayments are supported as a first-class **transaction ledger** for capture and reporting (settlement is future). See `17-micropayments.md` and `18-x402.md`.
 

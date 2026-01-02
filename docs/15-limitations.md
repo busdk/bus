@@ -39,12 +39,14 @@ v1 is CLI-only.
 
 v1 is local-only.
 
+Future versions may add a hosted facilitator (HTTP server) as a thin front-end over the same core (see `13-architecture.md`).
+
 ## Invoices and Settlement Flows
 
 **v1 does not:**
 * Generate invoices
 * Handle settlements
-* Process payments
+* “Process payments” in the sense of automated settlement/invoicing
 * Create financial documents
 
 Ledger records exist; invoices and settlements can be built on top of the ledger in future versions.
@@ -64,7 +66,9 @@ Ledger records exist; invoices and settlements can be built on top of the ledger
 ### Transaction Features
 * No transaction editing (append-only)
 * No transaction deletion
-* No transaction aggregation or reporting
+* No general-purpose analytics/reporting engine
+
+Bus v1 may include **micropayments reporting** over normalized transactions (see `17-micropayments.md`), but does not attempt to be a full accounting/reporting system.
 
 ### Schema Features
 * No schema versioning
@@ -79,9 +83,10 @@ Ledger records exist; invoices and settlements can be built on top of the ledger
 * No unit search or filtering
 
 ### Data Import/Export
-* No import from other formats
-* No export to other formats
+* No generic import/export pipelines
 * No data migration tools
+
+Bus may ingest protocol artifacts for capture mechanisms such as x402 (see `18-x402.md`).
 
 ## Why These Limitations?
 

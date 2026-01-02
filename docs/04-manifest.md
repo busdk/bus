@@ -1,8 +1,18 @@
-# Manifest Format: `bus.yml`
+# Manifest Format: `bus.{yml,yaml,toml,json}`
 
-The manifest file (`bus.yml`) is the root configuration file for a Bus workspace.
+The manifest file is the root configuration file for a Bus workspace.
+
+In v1, the manifest may be stored as:
+- `bus.yml`
+- `bus.yaml`
+- `bus.toml`
+- `bus.json`
+
+If multiple candidates exist, Bus MUST error (see `16-multi-format-storage.md`).
 
 ## File Format
+
+The examples below use YAML for readability, but the same fields are representable in TOML or JSON.
 
 ```yaml
 kind: bus.manifest
@@ -33,7 +43,7 @@ units:
   - name: organization
     path: organization.yml
   - name: server
-    path: infra/server.yml
+    path: infra/server.toml
 ```
 
 ### Schema Reference Fields
@@ -44,7 +54,7 @@ units:
 * **MUST** be unique within `units[]`
 
 #### `path`
-* Path to the schema YAML file
+* Path to the schema document file (`.yml`/`.yaml`/`.toml`/`.json`)
 * **MUST** be unique within `units[]`
 * Resolved relative to the manifest location (current working directory) unless absolute
 
