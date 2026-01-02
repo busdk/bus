@@ -1,7 +1,7 @@
 # Tenancy (Isolation From Day One)
 
 ## What this is
-Tenant selection and isolation rules that apply to all core interfaces and module capabilities.
+Tenant selection and isolation rules that apply to all core interfaces and transport-exposed capabilities.
 
 ## Tenant selection (binding)
 Resolution order for `TenantID`:
@@ -14,8 +14,12 @@ Rules:
 - No storage interface may read/write without `TenantID`.
 - Reads and writes MUST NOT cross tenant boundaries by default.
 
-## Storage roots (binding)
-All Bus-owned mutable state is under `.bus/`, tenant-scoped as:
-- `.bus/tenants/<tenantId>/...`
+## Internal state scoping (binding)
+Internal mutable state MUST be tenant-scoped regardless of storage backend.
+
+Backend-specific roots and layouts are defined in:
+- `docs/spec/state-storage.md`
+- `docs/spec/state-backend-dotbus.md`
+- `docs/spec/state-backend-database.md`
 
 

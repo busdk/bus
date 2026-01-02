@@ -20,6 +20,10 @@ The manifest is a document with:
 - `kind: bus.manifest`
 - `version: 1`
 
+Optional (internal state backend selection; schema config remains filesystem-based):
+- `state.backend`
+- `state.config`
+
 ## Path resolution (binding)
 - Paths stored in the manifest are resolved relative to the manifest location unless absolute.
 

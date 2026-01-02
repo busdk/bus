@@ -1,12 +1,10 @@
-# Codecs + Deterministic Formatting
+# Codecs + Deterministic Formatting (Generic)
 
 ## What this is
 Multi-format storage rules (YAML/TOML/JSON), codec extensibility, and deterministic output requirements.
 
-## Supported formats (binding)
-- YAML: `.yml`, `.yaml`
-- TOML: `.toml`
-- JSON: `.json`
+## Supported formats (end goal)
+Bus is designed to support YAML/TOML/JSON via selectable built-in codecs. Implementations may introduce formats incrementally (one patch at a time) as separate roadmap steps.
 
 Bus MUST NOT introduce a custom file format.
 
@@ -23,7 +21,7 @@ All formats decode into a single canonical representation before:
 - uniqueness checks
 - any feature logic
 
-## Codec plugin architecture (extension point)
+## Codec registry architecture (extension point)
 
 ### `Codec`
 Each codec provides:

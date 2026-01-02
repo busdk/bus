@@ -11,7 +11,7 @@ Every feature is a module. Core does not accrete feature logic.
 ### Small, stable core
 Bus Core exists to orchestrate modules. Adding a feature should primarily mean:
 - implement an interface
-- register a module
+- wire/register a built-in implementation
 
 It should not mean editing core routing logic.
 
@@ -33,6 +33,8 @@ Bus MUST NOT perform Git operations (init/commit/merge/etc). Git is outside the 
 Bus MUST NOT require directories like `schemas/` or `units/` at the top level.
 
 ### Only `.bus/` is controlled structure
-All Bus-owned mutable state lives under `.bus/`.
+When the **filesystem state backend** is selected, all Bus-owned mutable state lives under `.bus/`.
+
+When a **database state backend** (or other non-filesystem backend) is selected, internal mutable state lives in that backend and `.bus/` is not required.
 
 

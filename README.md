@@ -1,6 +1,8 @@
 # Bus
 
-Bus is a **modular, schema-driven** system for managing business-unit data and append-only accounting history in a **local, Git-friendly** workspace.
+Bus models an organization as **tenant-scoped Units** (teams, projects, infra, vendors, etc.) that **provide and consume Services** under explicit **relationships/contracts**. As services are used, Bus records the activity as **append-only, ledger-like transactions** (debits/credits between units), so balances can be reconciled and later settled (e.g., via generated invoices or exports to external accounting systems).
+
+Unlike a traditional DB-first tool, Bus keeps **schemas and workspace config in a Git workspace**: changes are reviewable, mergeable, and auditable as commits. It starts **CLI-first (script/agent friendly)** and is designed to later expose the same core via a REST API, without moving feature logic into the core. Internal mutable state is **pluggable** (filesystem `.bus/` or a database backend).
 
 ## Start here
 

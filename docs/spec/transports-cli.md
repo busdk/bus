@@ -1,7 +1,7 @@
 # Transports (CLI First)
 
 ## What this is
-How external interfaces (CLI now, HTTP later) invoke module capabilities without embedding business logic in the transport or in core.
+How external interfaces (CLI now, HTTP later) invoke core operations without embedding business logic in the transport.
 
 ## Request context (cross-cutting)
 Every capability invocation MUST carry a `RequestContext` containing:

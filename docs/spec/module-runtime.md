@@ -1,59 +1,60 @@
-# Module Runtime (Core Extension Point)
+# Interfaces + Implementations (Compile-Time Composition)
 
 ## What this is
-The core module system contract. Bus Core owns these interfaces and orchestrates the lifecycle. Modules implement them.
+Bus is modular via **internal Go interfaces** and **swappable implementations**.
+
+Implementations are compiled into the binary, and Bus may include **multiple built-in implementations for the same interface** at the same time (e.g., filesystem vs database state backends). Selection between built-in implementations is **runtime**, driven by config, but remains **static in code** (no plugins).
+
+There is **no runtime module system**:
+- no module lifecycle (`Init/Start/Stop`)
+- no dependency graph / cycle detection
+- no dynamic capability registry
+- no plugin discovery / loading external code
+
+Instead, “features” are **packages** that provide implementations of core-owned interfaces and (optionally) transport bindings (CLI/HTTP) that call core operations.
 
 ## Interfaces (names are stable contracts)
 
-### `Module`
-Responsibility: declare identity/dependencies and register capabilities.
+### `App` (composition root; suggested)
+Responsibility: hold references to the concrete implementations used by this Bus build.
 
-Required:
-- `ID() string` — globally unique module id (e.g., `"core.units"`).
-- `Version() string` — module version (informational).
-- `Requires() []string` — module ids required to be present.
-- `Register(r Registrar) error` — register capabilities and implementations.
+`App` is constructed once (e.g., in `main`) and passed to CLI/HTTP front-ends.
 
-Optional lifecycle hooks:
-- `Init(ctx RuntimeContext) error`
-- `Start(ctx RuntimeContext) error`
-- `Stop(ctx RuntimeContext) error`
+### Core-owned service interfaces (examples)
+Responsibility: narrow, stable seams between components. Implementations can vary without changing callers.
 
-### `Registrar`
-Responsibility: the only way modules interact with core at registration time.
+Examples (defined elsewhere in `docs/spec/*` and referenced here):
+- workspace config IO: `ManifestStore`, `SchemaStore` (filesystem-based)
+- internal state: `StateBackend` (filesystem `.bus` or database)
+- domain ops: schema init/validation, unit create/list/show, reporters, exporters
 
-Minimum responsibilities:
-- Register a **capability** (commands/endpoints/exporters/etc).
-- Provide an implementation for a **core-owned interface** (dependency injection by interface).
+## Wiring + runtime selection (binding)
+All dependencies are wired via code, but selection may occur at startup:
 
-### `ModuleRegistry`
-Responsibility: discovery + storage of available modules.
+- **Compile-time**: the binary includes one or more implementations of an interface.
+- **Runtime**: Bus selects which built-in implementation to use based on config (deterministically).
 
-- `RegisterModule(m Module) error`
-- `ListModules() []Module`
+### Provider registry pattern (simple, built-in)
+For any interface that supports multiple built-in implementations, Bus uses a small in-process registry:
+- key: stable string id (e.g., `"filesystem"`, `"database"`)
+- value: factory/constructor that returns an implementation
 
-### `ModuleRuntime`
-Responsibility: validate, order, initialize, and run modules.
+This is **not** a module system; it is a deterministic selection mechanism for built-in implementations.
 
-- `Load(reg ModuleRegistry, cfg RuntimeConfig) error`
-- `Start() error`
-- `Stop() error`
-- `Capabilities() CapabilitySet`
+Examples:
+- `StateBackend` selected by `state.backend` (see `docs/spec/state-storage.md`)
+- codecs selected by file extension (registry maps extensions → codec)
 
-### `CapabilitySet` (opaque)
-Responsibility: read-only view of registered capabilities for transports.
+### CLI binding
+The CLI binds command handlers to core operations by calling methods on the composed `App`.
 
 Rule:
-- Core treats capability registration as **data**, not branching logic.
+- Adding a feature should still be “implement an interface + wire/register the implementation”, but wiring/registration is **code**, not plugin discovery.
 
 ## Required behaviors
 
-### Dependency ordering
-- Runtime MUST produce a deterministic initialization order.
-- Cycles in `Requires()` MUST be detected and reported as an error.
-
 ### Core boundary
 - Core provides orchestration and cross-cutting enforcement hooks.
-- Business logic lives in modules.
+- Business logic is expressed behind interfaces (in packages), with implementations swapped via wiring.
 
 

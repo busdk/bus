@@ -1,7 +1,11 @@
 # Units
 
 ## What this is
-Unit document format, storage layout, and validation rules for create/list/show.
+Unit document format and validation rules for create/list/show.
+
+Internal state storage (records + indexes) is backend-defined and pluggable:
+- filesystem backend: `docs/spec/state-backend-dotbus.md`
+- database backend: `docs/spec/state-backend-database.md`
 
 ## Unit document (binding)
 Logical fields:
@@ -10,16 +14,11 @@ Logical fields:
 - `schema: <schemaName>`
 - `data: { ... }`
 
-## Storage layout (binding)
-Tenant-scoped under `.bus/tenants/<tenantId>/`:
-
-- Index: `units/<schemaName>.ids`
-  - one id per line
-  - newline at EOF
-  - no blank lines
-  - deterministic ordering (recommended: lexicographic sort)
-
-- Records: `units/<schemaName>/<primaryId>.<ext>`
+## Storage layout
+Backend-defined (see links above). Regardless of backend:
+- storage is tenant-scoped
+- listing ids is deterministic
+- records are keyed by `(tenantId, schemaName, primaryId)`
 
 ## Primary id rules (binding)
 - String primary id: user MUST provide.

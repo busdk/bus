@@ -28,7 +28,7 @@ A schema-driven typed reference (`ref:<schemaName>`) plus domain properties.
 An append-only ledger entry. In this design, a transaction is stored as a unit in a schema you define (commonly named `transaction`).
 
 ### Module
-An independently implementable feature package that implements interfaces and registers capabilities at startup.
+An independently implementable feature package that implements core-owned interfaces and is wired into the app as a built-in implementation (no runtime module system).
 
 ### Capability
 Something a module exposes to transports (CLI/API): commands, endpoints, exporters, providers, etc.
