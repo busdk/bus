@@ -1,45 +1,45 @@
-# Bus CLI v1 Documentation
+# Bus Documentation
 
-This directory contains documentation for Bus CLI v1, organized by topic.
+Start here:
+- **Roadmap**: `docs/roadmap/0.0.0.md`
+- **Core principles**: `docs/spec/principles.md`
+- **Vocabulary**: `docs/spec/vocabulary.md`
 
-## Documentation Index
+## Roadmap (implementation order)
 
-1. **[Overview](01-overview.md)** - Introduction, goals, and core concepts
-2. **[Constraints](02-constraints.md)** - Non-negotiable design constraints
-3. **[Workspace Structure](03-workspace-structure.md)** - Files and directory organization
-4. **[Manifest](04-manifest.md)** - `bus.{yml,yaml,toml,json}` format and structure
-5. **[Schemas](05-schemas.md)** - Schema file format, property types, and attributes
-6. **[Billing](06-billing.md)** - Billing / ledger as schema patterns (no built-in billing engine)
-7. **[Units](07-units.md)** - Unit storage format and operations
-8. **[Relations](08-relations.md)** - Relations model and provider/consumer pattern
-9. **[Transactions](09-transactions.md)** - Ledger and transaction format
-10. **[CLI Commands](10-cli-commands.md)** - Command reference and usage
-11. **[Consistency](11-consistency.md)** - Atomic operations and locking
-12. **[Formatting](12-formatting.md)** - Deterministic formatting requirements
-13. **[Architecture](13-architecture.md)** - Internal Go architecture and interfaces
-14. **[Examples](14-examples.md)** - Example workflows and usage
-15. **[Limitations](15-limitations.md)** - What v1 does not do
-16. **[Multi-Format Storage](16-multi-format-storage.md)** - YAML/TOML/JSON storage and extensible codec architecture
-17. **[Micropayments](17-micropayments.md)** - Microtransaction ledger, integrity, and future settlement extensions
-18. **[x402](18-x402.md)** - x402 capture mechanism spec and wire formats
+Each file in `docs/roadmap/{VERSION}.md` is one implementable increment for Bus `{VERSION}`:
+- [0.0.0](roadmap/0.0.0.md)
+- [0.0.1](roadmap/0.0.1.md)
+- [0.0.2](roadmap/0.0.2.md)
+- [0.0.3](roadmap/0.0.3.md)
+- [0.0.4](roadmap/0.0.4.md)
+- [0.0.5](roadmap/0.0.5.md)
+- [0.0.6](roadmap/0.0.6.md)
+- [0.0.7](roadmap/0.0.7.md)
+- [0.0.8](roadmap/0.0.8.md)
+- [0.0.9](roadmap/0.0.9.md)
+- [0.0.10](roadmap/0.0.10.md)
+- [0.0.11](roadmap/0.0.11.md)
+- [0.0.12](roadmap/0.0.12.md)
+- [0.0.13](roadmap/0.0.13.md)
+- [0.0.14](roadmap/0.0.14.md)
 
-## Quick Start
+## Spec (reusable concepts)
 
-For a quick introduction, start with:
-1. [Overview](01-overview.md) - Understand the purpose and goals
-2. [Examples](14-examples.md) - See it in action
-3. [CLI Commands](10-cli-commands.md) - Learn the commands
-
-## Design Principles
-
-Bus CLI v1 is designed to be:
-* **Local-first**: All data stored in files
-* **Git-friendly**: Deterministic, merge-friendly structure
-* **Schema-driven**: Business logic in schemas, not code
-* **Atomic**: Operations either complete or make no changes
-* **Modular**: Architecture supports future extensions
-
-## Related Documents
-
-The main design document that this documentation is based on is the Bus CLI v1 Design Document, which provides the complete specification.
+- [Principles (non-negotiable)](spec/principles.md)
+- [Vocabulary](spec/vocabulary.md)
+- [Module runtime](spec/module-runtime.md)
+- [Transports (CLI)](spec/transports-cli.md)
+- [Workspace + manifest](spec/workspace-manifest.md)
+- [Tenancy](spec/tenancy.md)
+- [Codecs + deterministic formatting](spec/codecs-and-formatting.md)
+- [Locking + atomic writes](spec/locking-and-atomic-writes.md)
+- [Schemas](spec/schemas.md)
+- [Units](spec/units.md)
+- [Relations](spec/relations.md)
+- [Ledger / transactions](spec/ledger-transactions.md)
+- [Micropayments](spec/micropayments.md)
+- [x402](spec/x402.md)
+- [Exports + settlement extension points](spec/exports-and-settlement.md)
+- [Hosted facilitator (HTTP + OpenAPI)](spec/hosted-facilitator-http.md)
 
