@@ -18,9 +18,6 @@ It should not mean editing core routing logic.
 ### Append-only accounting history
 Ledger-like records are create-only. Corrections are new records (reversals/adjustments), never edits.
 
-### Multi-tenant from day one
-All operations are tenant-scoped. Storage and queries must not allow cross-tenant reads/writes by default.
-
 ### Interfaces first
 Every capability starts as a core-owned interface (or small interface set). Modules provide implementations.
 

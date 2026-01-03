@@ -12,9 +12,6 @@ The working directory that contains exactly one manifest candidate:
 ### Manifest
 The workspace root configuration document (`kind: bus.manifest`).
 
-### Tenant
-An isolation domain. All reads/writes happen in a tenant context (including local CLI mode).
-
 ### Schema
 A document (`kind: bus.schema`) defining unit shape and constraints.
 

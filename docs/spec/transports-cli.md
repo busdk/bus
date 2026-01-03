@@ -5,7 +5,6 @@ How external interfaces (CLI now, HTTP later) invoke core operations without emb
 
 ## Request context (cross-cutting)
 Every capability invocation MUST carry a `RequestContext` containing:
-- `TenantID`
 - `Actor` (opaque; for authz hooks)
 - `RequestID` (for audit hooks)
 
