@@ -35,6 +35,4 @@ Bus MUST NOT require directories like `schemas/` or `units/` at the top level.
 ### Only `.bus/` is controlled structure
 When the **filesystem state backend** is selected, all Bus-owned mutable state lives under `.bus/`.
 
-When a **database state backend** (or other non-filesystem backend) is selected, internal mutable state lives in that backend and `.bus/` is not required.
-
-
+When a **database state backend** (or other non-filesystem backend) is selected, internal mutable state lives in that backend and `.bus/` is not required, except for optional configurations like database settings.

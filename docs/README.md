@@ -36,9 +36,6 @@ Each `docs/roadmap/{VERSION}.md` file is one implementable increment.
 
 This index groups patch steps into **minor-version milestones** for easier planning and review.
 
-Note: some file browsers (including GitHub’s folder view) sort filenames lexicographically, not by SemVer.
-Use this index as the authoritative sequence.
-
 ### v0.0 — Foundations
 - [0.0.1](roadmap/0.0.1.md) — Doc conventions, vocabulary, and non-negotiable principles.
 - [0.0.2](roadmap/0.0.2.md) — **Core**: interfaces + built-in implementation selection.
@@ -126,4 +123,3 @@ Use this index as the authoritative sequence.
 - [Hosted facilitator (HTTP + OpenAPI)](spec/hosted-facilitator-http.md)
 - [Operational automation (tasks/playbooks)](spec/operational-automation.md)
 - [Secret fields](spec/secrets.md)
-
