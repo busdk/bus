@@ -1,0 +1,161 @@
+---
+description: "Bus: how to read + maintain design documents (roadmap/spec) and keep README entry points consistent"
+alwaysApply: true
+globs: ["*"]
+---
+
+This repository is in a planning-first stage. The authoritative “what to build 
+next” and “what rules must be followed” live in the documentation set under 
+/docs, but the repository root README.md is also an important entry point (Git 
+hosting UI, onboarding, and discovery). When assisting, always ground decisions 
+in the roadmap/spec documents and keep both README entry points consistent 
+where appropriate.
+
+Two entry points and why both must exist:
+
+1) README.md (repository root)
+
+- This is the Git repository landing page (shown by GitHub/Gitea/etc.). It must 
+  remain a concise “front door”: what Bus is, how to start, and where the docs 
+  live.
+
+- It should contain a short, high-level description and links into docs/ (docs 
+  entry point + roadmap start). It may duplicate some “summary” content from 
+  docs/README.md on purpose so that the repo landing page is self-explanatory.
+
+2) docs/README.md (documentation entry point)
+
+- This is the canonical documentation index and may be used by a GitHub Pages / 
+  static site engine or other doc tooling that expects a docs-local entry point.
+
+- It is the authoritative index for (a) roadmap versions and (b) spec (reusable 
+  concept) documents. Do not create new “index” files elsewhere. When new 
+  roadmap/spec files are added, update docs/README.md to link them and only add 
+  roadmap/spec references there.
+
+Consistency rule between README.md and docs/README.md:
+
+- Keep the high-level product summary, “Start here” links, and core principles 
+  aligned between the two files.
+
+- README.md stays short and onboarding-focused; docs/README.md can be longer 
+  and is the authoritative index.
+
+- If you add or change any foundational concept wording (e.g., definition of 
+  Units/Services/transactions, modularity, append-only ledger, CLI-first + later 
+  HTTP), reflect that change in both places when it affects the introductory 
+  understanding of the project.
+
+- Do not duplicate the entire roadmap/spec index into the root README.md. The 
+  full index belongs only in docs/README.md.
+
+Authoritative design sources (what to read first):
+
+- Always start from README.md (for project overview + pointers), then follow:
+
+  1) docs/README.md (canonical doc index and links)
+
+  2) the specific docs/roadmap/{VERSION}.md that matches the task (or the 
+     nearest planned version if the task is “what’s next?”)
+
+  3) any spec docs referenced by that version file
+
+  4) and always also the non-negotiable vocabulary + principles docs (exact 
+     paths are whatever docs/README.md links)
+
+Where to find design information:
+
+Roadmap version design documents:
+
+- docs/roadmap/{VERSION}.md (example: docs/roadmap/0.2.7.md)
+
+- Each version file represents exactly one small, implementable increment with 
+  explicit acceptance criteria.
+
+- It is the authority for that increment’s scope, non-goals, and definition of 
+  done.
+
+Reusable concept/spec documents:
+
+- The canonical list and paths are in docs/README.md (docs/spec/{concept}.md).
+
+- Follow the paths as listed in docs/README.md rather than assuming locations.
+
+Non-negotiable specs:
+
+Two spec documents must always be treated as “non-negotiable” constraints for 
+every change:
+- Vocabulary
+- Principles
+
+Their exact paths are whatever docs/README.md links as “Vocabulary” and 
+“Principles”. If multiple copies exist, prefer the ones referenced by 
+docs/README.md and treat duplicates as legacy unless explicitly instructed 
+otherwise.
+
+SemVer roadmap rules (how increments are defined):
+
+Patch versions (X.Y.Z) are the unit of delivery and must be as small as 
+possible while still being meaningful and independently implementable. Each 
+patch version’s Definition of Done includes all three in the same patch scope:
+- Documentation updates
+- Implementation
+- Automated tests
+
+Do not split a single increment across multiple patch versions (e.g., “docs 
+now, tests later” is not acceptable).
+
+Minor versions (X.Y) group related patch steps into small but meaningful 
+milestones for planning/review. Keep minors as small as possible while still 
+forming a coherent milestone.
+
+Editing rules for docs:
+
+If creating a new roadmap increment:
+- Add exactly one new file at docs/roadmap/{NEW_VERSION}.md.
+- Follow the existing roadmap file structure and headings used in this repo.
+- Ensure it includes: goal, non-goals, documentation goals, implementation 
+  goals, automated testing goals, and acceptance criteria.
+- Add a link to the new version file in docs/README.md in the correct milestone 
+  section.
+- Do not add references to new roadmap files anywhere else besides 
+  docs/README.md.
+
+If creating a new reusable spec:
+- Place it at the location pattern used by the repo and referenced in 
+  docs/README.md (docs/spec/{concept}.md).
+- Add it to the “Spec (reusable concepts)” list in docs/README.md.
+- Update any roadmap versions that should reference it explicitly.
+
+If updating docs/README.md:
+
+- Only adjust it to keep the roadmap/spec references accurate and complete (add 
+  new links, fix paths, keep grouping consistent).
+
+- docs/README.md is the only place where the full roadmap index and spec index 
+  should live.
+
+If updating root README.md:
+
+- Keep it concise and onboarding-focused.
+
+- Ensure it links to docs/README.md and the docs/README.md.
+
+- Mirror only the short summary sections (overview, start here, core 
+  principles, key extension-point pointers) that help a new reader understand the 
+  project without diving into docs/ yet.
+
+Planning-only mode vs implementation mode:
+
+- If the user asks for planning/design work, change only docs (roadmap/spec and 
+  the README entry points as needed) and keep it implementation-agnostic.
+
+- If the user asks for implementation work, implement only what the targeted 
+  docs/roadmap/{VERSION}.md defines, and ensure tests are added in the same patch 
+  scope.
+
+When something is unclear:
+
+Do not guess structure or paths. Use README.md and docs/README.md as the source 
+of truth for where things live, then follow links to the correct roadmap/spec 
+documents before proceeding.
