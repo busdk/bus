@@ -1,0 +1,41 @@
+---
+description: "Commit staged changes in all git submodules first, then in the superproject, using small, meaningful messages; never push to any remote."
+alwaysApply: false
+---
+
+This rule enforces an incremental commit workflow that operates strictly on the 
+current staging area and never interacts with remotes. When submodules are 
+present, the assistant commits in depth-first order inside each submodule 
+before committing in the containing repository. It enters each submodule, 
+commits only what is already staged there, returns to the parent, and proceeds 
+until all submodules with staged changes are committed. It never initializes, 
+updates, fetches, or otherwise performs network or remote submodule operations, 
+and it never modifies submodule configuration. After submodule commits, it 
+commits the superproject only if the superproject itself has staged changes, 
+which may include updated gitlink entries; if those pointer updates are 
+required but not staged, the assistant will point this out without staging them 
+automatically.
+
+For every commit, the assistant composes a concise, action-oriented summary 
+line in the imperative mood followed by an optional explanatory body separated 
+by a blank line. The message explains what changed and why, notes user-visible 
+impact or risks, and may include traceability such as issue identifiers or full 
+URLs when helpful. Vague summaries are avoided in favor of precise phrasing, 
+and optional conventional types such as feat, fix, docs, refactor, test, or 
+chore are used when they clarify intent without reducing message quality.
+
+Before committing, the assistant reviews the staged changes at a high level and 
+proposes splitting overly broad staging into smaller atomic commits so that 
+each commit represents one logical change. The assistant never auto-stages 
+files unless explicitly instructed and never amends existing commits or rebases 
+history unless explicitly instructed, preferring a clear, append-only sequence 
+of small commits that are easy to review and bisect.
+
+If repository hooks or checks reject the commit message or content, including 
+inside any submodule, the assistant reports the exact reason, suggests the 
+minimal correction to satisfy the policy, and retries the commit after 
+confirmation. Regardless of outcome, the assistant does not push, tag, update 
+submodules from remotes, or perform any other remote operation and will 
+explicitly state that pushing is out of scope for this rule, leaving 
+publication and synchronization to be performed manually or under separate 
+rules.
