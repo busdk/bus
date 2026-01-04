@@ -10,5 +10,3 @@ How Bus models “transactions” without a special transaction subsystem: trans
 
 ## Idempotency guidance
 If transactions are generated externally and re-run, prefer deterministic primary ids (often string ids) so duplicates are naturally prevented by uniqueness.
-
-

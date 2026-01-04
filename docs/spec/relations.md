@@ -19,7 +19,7 @@ Schema property attribute:
 Meaning:
 - The property value must be unique per distinct tuple of scope values.
 
-Common multi-tenant pattern:
+Common patterns:
 - `email` unique within `organizationId`:
   - `unique: true`
   - `uniqueScope: [organizationId]`
