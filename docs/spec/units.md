@@ -22,7 +22,7 @@ Backend-defined (see links above). Regardless of backend:
 ## Primary id rules (binding)
 - String primary id: user MUST provide.
 - UUID primary id: user may provide; otherwise Bus auto-generates (random next free UUID).
-- Int primary id: user MUST provide; otherwise Bus auto-generates (auto incremental).
+- Int primary id: user MUST provide; otherwise Bus auto-generates (auto incremental next free ID).
 
 File naming rule:
 - record filename and `.ids` entry MUST match the primary id string form.

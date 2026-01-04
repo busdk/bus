@@ -25,7 +25,7 @@ When a user runs `bus <t0> ...`, the CLI resolves in this order:
 3. Else error.
 
 Collision rule:
-- Built-in wins. Schema commands remain reachable via `bus unit <schemaName> ...`.
+- Built-in wins. Schema commands remain reachable via `bus schema <schemaName> ...`.
 
 ## Script-friendly parsing (binding)
 Unit creation input uses positional `key=value` tokens:
