@@ -1,27 +1,86 @@
 # Bus
 
-Bus models an organization as **Units** (teams, projects, infra, vendors, etc.) that **provide and consume Services** under explicit **relationships/contracts**. As services are used, Bus records the activity as **append-only, ledger-like transactions** (debits/credits between units), so balances can be reconciled and later settled (e.g., via generated invoices or exports to external accounting systems).
+![Status](https://img.shields.io/badge/status-planning-blue)
+![License](https://img.shields.io/github/license/hyperifyio/bus)
 
-Unlike a traditional DB-first tool, Bus keeps **schemas and workspace config in a Git workspace**: changes are reviewable, mergeable, and auditable as commits. It starts **CLI-first (script/agent friendly)** and is designed to later expose the same core via a REST API, without moving feature logic into the core. Internal mutable state is **pluggable** (filesystem `.bus/` or a database backend).
+Bus is a **modular, CLI-first accounting core** for Finnish small businesses.
+It provides a **double-entry, append-only ledger** with VAT (ALV) reporting,
+period closing, and audit trails compliant with Finnish accounting law. The
+system is **offline-first** and **VCS-friendly** (Bus does not run Git
+operations) and is designed to expose a matching REST API with OpenAPI.
+
+## Table of contents
+- [Start here](#start-here)
+- [Features](#features)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Tests](#tests)
+- [Support](#support)
+- [Credits](#credits)
+- [License](#license)
+- [Project status](#project-status)
 
 ## Start here
-
 - **Docs entry point**: `docs/README.md`
+- **Design plan**: `docs/spec/accounting-finnish-smb.md`
 - **Roadmap start (authoritative)**: `docs/roadmap/0.0.1.md`
 
-The design is written as an ordered sequence of small SemVer increments:
-- `docs/roadmap/0.0.1.md`, `docs/roadmap/0.0.2.md`, …
-- Each version file is one implementable increment with acceptance criteria.
+## Features
+- Double-entry, append-only ledger with audit trail.
+- VAT (ALV) reporting by rate and period.
+- Period close locks with adjustment entries.
+- Sales and purchase invoicing tied to ledger entries.
+- Offline-first storage with VCS-friendly formats.
+- Modular services with CLI-first and REST API parity.
 
-## Core principles (short form)
+## Architecture at a glance
+- **Core**: orchestrates modules and storage backends only.
+- **Modules**: ledger, chart of accounts, invoicing, VAT, bank imports, budgets.
+- **Transports**: CLI first, REST API later (OpenAPI).
+- **Storage**: filesystem `.bus/` or database backend.
 
-- **Modular-by-default**: features live in modules behind interfaces.
-- **Small, stable core**: core orchestrates modules; it does not accumulate feature logic.
-- **Append-only history**: ledger-like records are create-only; corrections are new records.
-- **Interfaces first**: adding a feature should be “implement an interface + register a module”.
+## Installation
+Bus is in a **planning-first** stage with no runnable binaries yet.
 
-## Where extension points live
+To read the docs locally:
+```shell
+git clone https://github.com/hyperifyio/bus.git
+cd bus
+```
 
-The core extension points are defined in the spec docs and introduced early in the roadmap:
-- `docs/spec/module-runtime.md`
-- `docs/spec/transports-cli.md`
+## Usage
+Planned CLI examples (not implemented yet):
+```shell
+bus init "Acme Oy"
+bus account add "3000 Sales"
+bus entry post --date 2026-02-15 --lines "1100:1240" "3000:1000" "2930:240"
+bus vat report 2026-02
+```
+
+## Roadmap
+- See `docs/README.md` for the authoritative roadmap index.
+
+## Contributing
+Contributions are welcome. Please read `CONTRIBUTING.md` and follow the
+workflow and traceability requirements described there. Participation is
+governed by `CODE_OF_CONDUCT.md`.
+
+## Tests
+No automated test suite exists yet because there is no implementation.
+When code lands, this section will document the standard test command.
+
+## Support
+Use GitHub Issues for bugs and feature requests:
+`https://github.com/hyperifyio/bus/issues`
+
+## Credits
+Maintainer: Hyperify.io. Significant contributors are listed in git history.
+
+## License
+See `LICENSE`.
+
+## Project status
+Planning-only and pre-alpha. No production use yet.

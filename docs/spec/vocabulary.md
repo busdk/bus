@@ -24,6 +24,21 @@ A schema-driven typed reference (`ref:<schemaName>`) plus domain properties.
 ### Transaction
 An append-only ledger entry. In this design, a transaction is stored as a unit in a schema you define (commonly named `transaction`).
 
+### Organization
+A tenant representing a single business or legal entity. All business data is
+scoped by `org_id`.
+
+### Account
+A chart-of-accounts item used by ledger entries for double-entry bookkeeping.
+
+### Journal entry
+A balanced ledger record (one transaction) containing one or more debit/credit
+lines.
+
+### Period
+A fiscal reporting window (monthly, quarterly, or yearly) that can be closed
+to prevent backdated postings.
+
 ### Module
 An independently implementable feature package that implements core-owned interfaces and is wired into the app as a built-in implementation (no runtime module system).
 

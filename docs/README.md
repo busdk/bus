@@ -2,12 +2,18 @@
 
 ## Bus
 
-Bus models an organization as **Units** (teams, projects, infra, vendors, etc.) that **provide and consume Services** under explicit **relationships/contracts**. As services are used, Bus records the activity as **append-only, ledger-like transactions** (debits/credits between units), so balances can be reconciled and later settled (e.g., via generated invoices or exports to external accounting systems).
+Bus is a **modular, CLI-first accounting core** for Finnish small businesses.
+It records **double-entry, append-only ledger entries**, supports VAT (ALV),
+period closing, and audit trails required by Finnish accounting law. The system
+is **offline-first** and **VCS-friendly** (Bus does not run Git operations), and
+it is designed to expose the same capabilities via a REST API with OpenAPI.
 
-Unlike a traditional DB-first tool, Bus keeps **schemas and workspace config in a Git workspace**: changes are reviewable, mergeable, and auditable as commits. It starts **CLI-first (script/agent friendly)** and is designed to later expose the same core via a REST API, without moving feature logic into the core. Internal mutable state is **pluggable** (filesystem `.bus/` or a database backend).
+Core behavior is small and stable: domain logic lives in modules (ledger,
+invoicing, VAT reporting, bank imports), all behind core-owned interfaces.
 
 ## Start here
 
+- **Design plan (Finnish accounting)**: `spec/accounting-finnish-smb.md`
 - **Roadmap start (authoritative)**: `roadmap/0.0.1.md`
 
 The design is written as an ordered sequence of small SemVer increments:
@@ -116,6 +122,7 @@ This index groups patch steps into **minor-version milestones** for easier plann
 - [Database state backend](spec/state-backend-database.md)
 - [Relations](spec/relations.md)
 - [Ledger / transactions](spec/ledger-transactions.md)
+- [Finnish accounting system (design plan)](spec/accounting-finnish-smb.md)
 - [Micropayments](spec/micropayments.md)
 - [x402](spec/x402.md)
 - [Exports + settlement extension points](spec/exports-and-settlement.md)
