@@ -65,3 +65,21 @@ packages into tighter units with clear responsibilities and stable boundaries.
 The smallest workable abstraction is preferred over premature layering so that
 each unit can be understood, tested, and evolved independently while keeping
 the whole system predictable and maintainable.
+
+In this repository, follow standard Go project layout conventions. Put the 
+end-user executable entrypoint under cmd/<binary-name>/main.go, where 
+<binary-name> is the produced binary name. Put reusable, repository-internal 
+code under internal/ with clear subpackages such as internal/cli for argument 
+and flag parsing, internal/accounts for accounts domain logic, internal/storage 
+for file I/O helpers, and internal/validate for schema and data validation 
+utilities. Keep exported identifiers minimal and prefer small packages with 
+single responsibilities. Put public Go packages intended to be imported by 
+other repositories only under pkg/; if nothing is meant to be imported 
+externally, do not create pkg/. Put tests alongside the code they test using 
+*_test.go files in the same package. Put any test fixtures you must commit 
+under testdata/ and ensure tests can also generate fixtures in temporary 
+directories when appropriate. Keep the module definition at the repository root 
+in go.mod and go.sum. Put documentation at the repository root as README.md. 
+Put build and developer automation at the repository root as Makefile. Use 
+consistent naming, avoid deep nesting unless necessary, and keep cmd/ thin by 
+moving real logic into internal packages so it is unit-testable.
