@@ -110,6 +110,7 @@ func buildFakeSubcommand(t *testing.T, targetDir, label string) string {
 	t.Helper()
 
 	sourceDir := t.TempDir()
+	goMod := "module bus-subcmd\n\ngo 1.22\n"
 	source := fmt.Sprintf(`package main
 
 import (
@@ -140,6 +141,9 @@ func main() {
 	sourcePath := filepath.Join(sourceDir, "main.go")
 	if err := os.WriteFile(sourcePath, []byte(source), 0o600); err != nil {
 		t.Fatalf("write fake main.go: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "go.mod"), []byte(goMod), 0o600); err != nil {
+		t.Fatalf("write fake go.mod: %v", err)
 	}
 
 	outputName := "bus-accounts"
