@@ -1,0 +1,111 @@
+---
+description: "Rewrite the project's README.md to fully follow the Great README guide, including structure, content, visuals, and style."
+globs: README.md
+alwaysApply: true
+---
+
+This rule refines the current README so that it works as a clear front page for 
+the project, explaining what it is, why it matters, and how to use it. The 
+rewrite begins with an explicit title as the top heading and a short 
+description that states the project’s purpose, core functionality, and what 
+differentiates it. The opening must immediately answer why someone should use 
+this software and what problem it solves.
+
+Add a small set of status badges at the top when relevant, such as build 
+status, code coverage, latest release, license, or downloads. Keep badges 
+limited to the most useful signals and ensure they auto-update through common 
+badge providers. Do not add decorative badges that do not convey real status or 
+metadata.
+
+If the README becomes long or contains many sections, include a table of 
+contents directly after the introduction to improve navigation. Use anchor 
+links to headings so readers can jump to sections without scrolling.
+
+Provide installation instructions that allow a new user to get the project 
+running without prior knowledge. State prerequisites like required runtimes, 
+language versions, operating system dependencies, and external services. Give 
+explicit step by step commands to install and set up the software, including 
+package manager commands when applicable for Python, Node, Go, or C#. Include 
+any environment configuration such as environment variables, configuration 
+files, database initialization, or setup scripts needed for a working local 
+run.
+
+After installation, present usage with minimal, copyable quick start examples 
+that demonstrate the most common flow. Show concise code or command snippets 
+with correct language highlighting and explain the expected output so the 
+reader can verify success. If the project has a user interface or visual 
+output, include screenshots or animated recordings to show it in action, using 
+descriptive alt text and keeping image sizes reasonable so the page stays fast.
+
+If the project exposes multiple important capabilities, summarize headline 
+features briefly to set expectations. Keep the list focused on what helps users 
+decide quickly and link to deeper documentation only when necessary.
+
+Explain how users can get support. Point to the appropriate channels such as 
+the issue tracker, discussions, chat, forum, or email address. Make the primary 
+support path unambiguous so users know exactly where to ask questions or report 
+problems.
+
+Document your development roadmap if there are planned improvements. Describe 
+upcoming features and areas where help is welcome so contributors understand 
+direction and where to participate.
+
+State whether contributions are welcome and how to contribute. Explain the 
+expected workflow for changes, including forking or branching, opening pull 
+requests, and any review expectations. Mention coding standards where 
+applicable and refer to dedicated documents like a contributing guide or code 
+of conduct if the repository includes them. If these files are missing, create 
+them and link to them from the README.
+
+Include a tests section that tells users and contributors how to run the test 
+suite, any setup needed before tests, and how to interpret the results. If 
+tests are integral to the workflow, say so and show the standard command to run 
+them.
+
+Acknowledge authors and credits by listing maintainers and significant 
+contributors, and recognize major third party libraries or inspirations when 
+appropriate. Keep this section factual and concise while giving proper credit.
+
+State the license clearly and point to the repository’s license file. Use the 
+standard short name and make it easy for users to see the terms that govern 
+usage and contributions.
+
+Indicate project status to set expectations. If the project is experimental, 
+actively maintained, paused, or archived, say so clearly so users know what 
+level of stability and support to expect.
+
+Follow style and formatting practices that maximize clarity and scanability. 
+Use Markdown headings to structure the document, short paragraphs to avoid 
+walls of text, and fenced code blocks for commands and examples. Explain 
+uncommon jargon or abbreviations on first use, and write the README in English 
+unless the project is intentionally localized for another audience. Keep 
+formatting consistent across sections, including heading levels, lists, code 
+blocks, and image placement.
+
+Adapt the content to the project type. For libraries or modules, emphasize 
+installation via the ecosystem’s package manager and provide a minimal real 
+code example with initialization and a simple call. For command line tools, 
+show common invocations, flags, and typical outputs, and include help output if 
+helpful. For web or desktop applications, describe how to run locally from a 
+clean clone, list required environment variables and default credentials when 
+seeded, and consider linking to a live demo if one exists. For data science or 
+analysis repositories, describe the goal of the analysis, data sources and how 
+to obtain them, environment setup, and how to reproduce results with commands 
+or notebooks. For configuration, infrastructure, or container repositories, 
+show the minimal usage snippet that demonstrates how the configuration is 
+consumed in context.
+
+Keep the README current as a living document. Update it whenever installation 
+steps, usage, features, or support paths change so readers are never misled by 
+outdated instructions. If details grow too large, move deep guides, advanced 
+usage, and changelogs to dedicated files or a documentation site and link to 
+them, keeping the README focused on essentials while preserving 
+discoverability.
+
+When applying this rule, preserve valuable existing content, reorganize it into 
+the correct sections, and fill gaps with clear, project specific text rather 
+than placeholders whenever the information is available in the repository. 
+Verify that all core sections described in this rule are present and coherent, 
+that examples can be executed as written, that links and images resolve 
+correctly, and that the tone is professional, welcoming, and consistent 
+throughout.
