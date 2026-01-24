@@ -45,6 +45,30 @@ Or install from source (replace with your desired version tag):
 go install github.com/busdk/bus/cmd/bus@latest
 ```
 
+Or install via Makefile into a user-local prefix:
+
+```sh
+make install
+```
+
+Override the install prefix (default is `$(HOME)/.local`):
+
+```sh
+make install PREFIX="$HOME/.local"
+```
+
+Ensure the install location is on your PATH:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Uninstall the user-local binary:
+
+```sh
+make uninstall
+```
+
 ## Usage
 
 Quick start:
