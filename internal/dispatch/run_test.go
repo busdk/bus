@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
+	"testing/quick"
 
 	"bus/internal/dispatch"
 )
@@ -17,8 +21,13 @@ import (
 func TestRunNoArgs(t *testing.T) {
 	t.Parallel()
 
+	// Issue: https://github.com/busdk/bus/issues/2 - no-args help lists subcommands.
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "HELP")
+	env := prependPath(os.Environ(), tempDir)
+
 	var stderr bytes.Buffer
-	code := dispatch.Run([]string{"bus"}, os.Environ(), nil, io.Discard, &stderr)
+	code := dispatch.Run([]string{"bus"}, env, nil, io.Discard, &stderr)
 
 	if code != 2 {
 		t.Fatalf("expected exit code 2, got %d", code)
@@ -26,11 +35,22 @@ func TestRunNoArgs(t *testing.T) {
 	if !strings.Contains(stderr.String(), "usage: bus <command> [args...]") {
 		t.Fatalf("expected usage message, got %q", stderr.String())
 	}
+	if !strings.Contains(stderr.String(), "available commands:") {
+		t.Fatalf("expected subcommand list header, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "accounts") {
+		t.Fatalf("expected accounts in help output, got %q", stderr.String())
+	}
 }
+
+// Run properties (Issue: https://github.com/busdk/bus/issues/2):
+// - With no subcommand, help is printed and exit code is 2 regardless of env noise.
+// - The help output always includes a subcommand list header.
 
 func TestRunMissingSubcommand(t *testing.T) {
 	t.Parallel()
 
+	// Issue: https://github.com/busdk/bus/issues/2 - missing subcommand remains explicit.
 	tempDir := t.TempDir()
 	env := prependPath(os.Environ(), tempDir)
 
@@ -40,17 +60,21 @@ func TestRunMissingSubcommand(t *testing.T) {
 	if code != 127 {
 		t.Fatalf("expected exit code 127, got %d", code)
 	}
-	expected := `bus: subcommand "missing" not found; expected executable named bus-missing in PATH`
+	expected := `bus: missing subcommand: missing; expected executable named bus-missing in PATH`
 	if !strings.Contains(stderr.String(), expected) {
 		t.Fatalf("expected error %q, got %q", expected, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "usage: bus <command> [args...]") {
+		t.Fatalf("expected usage after error, got %q", stderr.String())
 	}
 }
 
 func TestRunDispatchesAndPassesArgs(t *testing.T) {
 	t.Parallel()
 
+	// Issue: https://github.com/busdk/bus/issues/2 - dispatch behavior unchanged.
 	tempDir := t.TempDir()
-	buildFakeSubcommand(t, tempDir, "PRIMARY")
+	buildFakeSubcommand(t, tempDir, "accounts", "PRIMARY")
 	env := prependPath(os.Environ(), tempDir)
 
 	var stdout bytes.Buffer
@@ -68,8 +92,9 @@ func TestRunDispatchesAndPassesArgs(t *testing.T) {
 func TestRunPassesExitCode(t *testing.T) {
 	t.Parallel()
 
+	// Issue: https://github.com/busdk/bus/issues/2 - exit codes pass through.
 	tempDir := t.TempDir()
-	buildFakeSubcommand(t, tempDir, "EXITCODE")
+	buildFakeSubcommand(t, tempDir, "accounts", "EXITCODE")
 	env := prependPath(os.Environ(), tempDir)
 	env = setEnv(env, "BUS_SUBCMD_EXIT_CODE", "7")
 
@@ -85,11 +110,12 @@ func TestRunPassesExitCode(t *testing.T) {
 func TestRunUsesFrontOfPath(t *testing.T) {
 	t.Parallel()
 
+	// Issue: https://github.com/busdk/bus/issues/2 - PATH front wins.
 	firstDir := t.TempDir()
 	secondDir := t.TempDir()
 
-	buildFakeSubcommand(t, firstDir, "FIRST")
-	buildFakeSubcommand(t, secondDir, "SECOND")
+	buildFakeSubcommand(t, firstDir, "accounts", "FIRST")
+	buildFakeSubcommand(t, secondDir, "accounts", "SECOND")
 
 	env := prependPath(os.Environ(), secondDir)
 	env = prependPath(env, firstDir)
@@ -106,7 +132,217 @@ func TestRunUsesFrontOfPath(t *testing.T) {
 	}
 }
 
-func buildFakeSubcommand(t *testing.T, targetDir, label string) string {
+func TestRunNoArgsShowsNoneWhenPathEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Issue: https://github.com/busdk/bus/issues/2 - help shows empty list when no commands exist.
+	env := setEnv(os.Environ(), "PATH", "")
+
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus"}, env, nil, io.Discard, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if strings.Contains(stderr.String(), "available commands:") {
+		t.Fatalf("expected no available commands section, got %q", stderr.String())
+	}
+}
+
+func TestRunHelpMetamorphicPathOrder(t *testing.T) {
+	t.Parallel()
+
+	// Issue: https://github.com/busdk/bus/issues/2 - listing is stable across PATH order.
+	firstDir := t.TempDir()
+	secondDir := t.TempDir()
+
+	buildFakeSubcommand(t, firstDir, "accounts", "FIRST")
+	buildFakeSubcommand(t, secondDir, "ledger", "SECOND")
+
+	envFirst := setEnv(os.Environ(), "PATH", firstDir+string(os.PathListSeparator)+secondDir)
+	envSecond := setEnv(os.Environ(), "PATH", secondDir+string(os.PathListSeparator)+firstDir)
+
+	firstList := helpSubcommands(t, envFirst)
+	secondList := helpSubcommands(t, envSecond)
+
+	if !reflect.DeepEqual(firstList, secondList) {
+		t.Fatalf("expected identical command lists, got %v vs %v", firstList, secondList)
+	}
+}
+
+func TestRunHelpMatchesReferenceListing(t *testing.T) {
+	t.Parallel()
+
+	// Issue: https://github.com/busdk/bus/issues/2 - help list matches reference scan.
+	tempDir := t.TempDir()
+
+	buildFakeSubcommand(t, tempDir, "accounts", "REF")
+	buildFakeSubcommand(t, tempDir, "ledger", "REF")
+
+	if runtime.GOOS != "windows" {
+		nonExecPath := filepath.Join(tempDir, "bus-nonexec")
+		if err := os.WriteFile(nonExecPath, []byte("skip"), 0o600); err != nil {
+			t.Fatalf("write non-exec file: %v", err)
+		}
+	}
+
+	env := setEnv(os.Environ(), "PATH", tempDir)
+	got := helpSubcommands(t, env)
+	want := referenceSubcommands(tempDir, env)
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected help list %v, got %v", want, got)
+	}
+}
+
+func TestRunNoArgsProperties(t *testing.T) {
+	t.Parallel()
+
+	// Issue: https://github.com/busdk/bus/issues/2 - no-args help is invariant over env noise.
+	tempDir := t.TempDir()
+	baseEnv := setEnv(os.Environ(), "PATH", tempDir)
+
+	config := &quick.Config{
+		MaxCount: 50,
+		Rand:     rand.New(rand.NewSource(42)),
+	}
+
+	property := func(extras []string) bool {
+		env := append([]string{}, baseEnv...)
+		env = append(env, sanitizeEnvExtras(extras)...)
+
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus"}, env, nil, io.Discard, &stderr)
+		if code != 2 {
+			return false
+		}
+		output := stderr.String()
+		return strings.Contains(output, "usage: bus <command> [args...]") &&
+			!strings.Contains(output, "available commands:")
+	}
+
+	if err := quick.Check(property, config); err != nil {
+		t.Fatalf("property test failed: %v", err)
+	}
+}
+
+func FuzzRunMissingSubcommand(f *testing.F) {
+	// Issue: https://github.com/busdk/bus/issues/2 - missing subcommands return 127 without panicking.
+	f.Add("accounts")
+	f.Add("ledger")
+	f.Add("foo/bar")
+
+	f.Fuzz(func(t *testing.T, subcommand string) {
+		tempDir := t.TempDir()
+		env := setEnv(os.Environ(), "PATH", tempDir)
+
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus", subcommand}, env, nil, io.Discard, &stderr)
+
+		if code != 127 {
+			t.Fatalf("expected exit code 127, got %d", code)
+		}
+		if !strings.Contains(stderr.String(), "subcommand") {
+			t.Fatalf("expected subcommand error, got %q", stderr.String())
+		}
+	})
+}
+
+func helpSubcommands(t *testing.T, env []string) []string {
+	t.Helper()
+
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus"}, env, nil, io.Discard, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	return parseSubcommands(stderr.String())
+}
+
+func parseSubcommands(help string) []string {
+	lines := strings.Split(help, "\n")
+	var commands []string
+	start := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "available commands:" {
+			start = true
+			continue
+		}
+		if !start {
+			continue
+		}
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		commands = append(commands, trimmed)
+	}
+	return commands
+}
+
+func referenceSubcommands(dir string, env []string) []string {
+	matches, err := filepath.Glob(filepath.Join(dir, "bus-*"))
+	if err != nil {
+		return nil
+	}
+
+	exts := parsePathExts(env)
+	seen := map[string]struct{}{}
+	for _, match := range matches {
+		info, err := os.Stat(match)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
+			continue
+		}
+
+		name := filepath.Base(match)
+		if runtime.GOOS == "windows" {
+			ext := strings.ToLower(filepath.Ext(name))
+			if ext == "" {
+				continue
+			}
+			if _, ok := exts[ext]; !ok {
+				continue
+			}
+			name = strings.TrimSuffix(name, ext)
+		}
+
+		command := strings.TrimPrefix(name, "bus-")
+		if command == "" {
+			continue
+		}
+		seen[command] = struct{}{}
+	}
+
+	commands := make([]string, 0, len(seen))
+	for command := range seen {
+		commands = append(commands, command)
+	}
+	sort.Strings(commands)
+	return commands
+}
+
+func parsePathExts(env []string) map[string]struct{} {
+	value, _ := lookupEnv(env, "PATHEXT")
+	if value == "" {
+		value = ".com;.exe;.bat;.cmd"
+	}
+	result := map[string]struct{}{}
+	for _, part := range strings.Split(strings.ToLower(value), ";") {
+		if part == "" {
+			continue
+		}
+		if !strings.HasPrefix(part, ".") {
+			part = "." + part
+		}
+		result[part] = struct{}{}
+	}
+	return result
+}
+
+func buildFakeSubcommand(t *testing.T, targetDir, subcommand, label string) string {
 	t.Helper()
 
 	sourceDir := t.TempDir()
@@ -146,7 +382,7 @@ func main() {
 		t.Fatalf("write fake go.mod: %v", err)
 	}
 
-	outputName := "bus-accounts"
+	outputName := "bus-" + subcommand
 	if runtime.GOOS == "windows" {
 		outputName += ".exe"
 	}
@@ -178,6 +414,17 @@ func setEnv(env []string, key, value string) []string {
 		updated = append(updated, prefix+value)
 	}
 	return updated
+}
+
+func sanitizeEnvExtras(extras []string) []string {
+	cleaned := make([]string, 0, len(extras))
+	for _, entry := range extras {
+		if strings.HasPrefix(entry, "PATH=") || strings.HasPrefix(entry, "PATHEXT=") {
+			continue
+		}
+		cleaned = append(cleaned, entry)
+	}
+	return cleaned
 }
 
 func prependPath(env []string, dir string) []string {
