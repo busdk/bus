@@ -65,6 +65,16 @@ a short CONTRIBUTING note that running “go test ./...” should pass and that
 this repo intentionally does not inclany business logic. Ensure all new files 
 are formatted, buildable, and tests pass with a clean checkout.
 
+Add a `Makefile` at the repository root that provides a small, consistent 
+developer interface for building, testing, formatting, and linting the 
+bus-accounts codebase; it must include targets for building the binary (for 
+example `make build` producing `bin/bus-accounts`), running the full test suite 
+(`make test` running `go test ./...`), formatting (`make fmt` running `gofmt` 
+over the repository), and a single convenience target (`make check`) that runs 
+formatting and tests in a deterministic order, with all commands failing the 
+target on error and without requiring any external tools beyond a standard Go 
+toolchain and POSIX make.
+
 Finally, implement everything in the working tree: go.mod, cmd/bus/main.go, 
 any internal package files you need, tests, and README.md. Keep the code small, 
 readable, and idiomatic Go, and do not add any extra features beyond what is 
