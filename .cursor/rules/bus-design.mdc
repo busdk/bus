@@ -1,0 +1,71 @@
+---
+description: "Main Design"
+alwaysApply: true
+globs: ["*"]
+---
+
+You are Cursor AI working inside a Git repository that will contain the core 
+`bus` command only. It is a tiny Go CLI called bus that acts purely as a 
+subcommand dispatcher, git-style. The rule is that running “bus <command> 
+…args…” must look for an executable named “bus-<command>” on PATH and execute 
+it, passing through all remaining arguments unchanged. The core bus command 
+must not contain any accounting logic or any knowledge of specific modules 
+beyond this dispatch rule. The dispatcher must behave deterministically and be 
+easy to test.
+
+Create a Go module for the repository, place the entrypoint at cmd/bus/main.go, 
+and structure the code so it is testable without relying on global os.Exit in 
+the middle of logic. Do this by implementing a Run function (for example 
+Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
+io.Writer) int) in a small internal package or in cmd/bus itself, and let 
+main() call os.Exit(Run(os.Args, os.Environ(), os.Stdin, os.StdouThe dispatcher 
+logic must follow these rules. If invoked with no subcommand arguments, it must 
+print a short usage line to stderr and exit with code 2. If invoked with a 
+subcommand name, it must resolve “bus-<name>” using exec.LookPath. If LookPath 
+fails, it must print a clear error to stderr that says the subcommand is 
+missing and that it expected an executable named bus-<name> to be available in 
+PATH, and it must exit with code. If the subcommand is found, it must execute 
+it with the remaining args, wiring stdin/stdout/stderr through unchanged, and 
+inheriting the parent environment. If the subcommand exits with a non-zero 
+code, bus must exit with the exact same exit code. If execution fails in a way 
+that does not yield an exit code (for example, command start failure after 
+LookPath, or other unexpected errors), bus must print a short “bus: …” error 
+err and exit with code 1. Keep flags and features out of scope for now; this 
+repo is only the dispatch behavior.
+
+Add complete automated tests that validate all behaviors and do not depend on 
+any external tools being installed. The tests must create a temporary 
+directory, place it on the front of PATH for the duration of each test, and 
+then provide a fake “bus-accounts” executable in that directory. Make the fake 
+executable in a portable way that works on the current host OS: write a tiny Go 
+program to a temp folder and compile it with “go build” into the t directory as 
+“bus-accounts” (or “bus-accounts.exe” on Windows). The fake program must allow 
+the tests to control its behavior via environment variables and must print 
+observable output so argument passing can be verir example it can print its 
+argv (excluding argv[0]) to stdout in a predictable format, and exit with a 
+code read from an env var like BUS_SUBCMD_EXIT_CODE (default 0). Then write 
+tests that call the Run function directly (preferred) or execute the built bus 
+binary (acceptable if you keep it reliable) to prove: running with no args 
+returns exit code 2 and prints usage to stderr, running “bus accounts foo bar” 
+executes the fake bus-accounts and the fake sees exactly “foo bar” as args, 
+stdout and stderr are passed through (at least verify stdout from the fake is 
+visibning a missing subcommand returns 127 and prints the expected message, 
+running a subcommand that exits 7 causes bus to exit 7, and the PATH resolution 
+uses the front of PATH so your temp stub is used. Keep the tests fast and 
+isolated, and avoid flaky assumptions.
+
+Write documentation as Markdown in README.md describing the purpose of this 
+repo, the subcommand naming convention, how dispatch works, what the exit codes 
+mean (2 for usage, 127 for missing subcommand, pass-through for subcommand 
+failures, 1 for unexpected execution errors), and a short example of how a user 
+would install a module binary such as bus-accounts so that “bus accounts” 
+works. Also include a brief design ratio section that explicitly says this core 
+is intentionally minimal and all features live in separate repos/binaries. Add 
+a short CONTRIBUTING note that running “go test ./...” should pass and that 
+this repo intentionally does not inclany business logic. Ensure all new files 
+are formatted, buildable, and tests pass with a clean checkout.
+
+Finally, implement everything in the working tree: go.mod, cmd/bus/main.go, 
+any internal package files you need, tests, and README.md. Keep the code small, 
+readable, and idiomatic Go, and do not add any extra features beyond what is 
+described here.
