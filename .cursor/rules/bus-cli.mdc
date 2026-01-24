@@ -1,0 +1,118 @@
+---
+description: Implement and document standard global CLI flags and parsing semantics for BuSDK tools, including -v/-vv verbosity, -V version, -q quiet, -C chdir, -o output, -f format, and color controls.
+alwaysApply: true
+---
+
+Implement and document the standard global flags described below. Do not 
+implement any unrelated features. The goal is to make flag behavior 
+deterministic, script-friendly, and consistent across commands.
+
+Base flag-parsing logic and conventions must be implemented as follows. Global 
+flags are accepted before the subcommand name. Flags may appear in any order. 
+The `--` token terminates flag parsing; anything after `--` is treated as 
+positional arguments for the subcommand even if it begins with `-`. Short flags 
+may be combined only if you explicitly implement that behavior; otherwise treat 
+each short flag as a distinct token. Repeated verbosity flags accumulate: `-vv` 
+is equivalent to `-v -v` and results in verbosity level 2; similarly `-vvv` is 
+level 3, and so on. Long `--verbose` occurrences also increment verbosity by 1 
+each time they appear. Quiet and verbose are mutually exclusive: providing both 
+is invalid usage. Help and version are immediate-exit flags that ignore other 
+flags and arguments.
+
+Implement a small, testable flag parsing module (for example 
+`internal/cli/flags.go`) that produces a configuration object (for example 
+`Flags{Help bool, Version bool, Quiet bool, Verbosity int, Chdir string, Output 
+string, Format string, Color string}`) plus the remaining args after parsing. 
+The tool’s Run function must use this parsed configurationo control behavior. 
+Ensure all code is gofmt formatted and covered by tests. Add or update 
+README.md to document every flag and its behavior precisely.
+
+Implement the following global flags and their behavior. Use `-v` for 
+`--verbose` and `-V` for `--version` exactly as specified here.
+
+* `-h`, `--help`: Print concise help text to standard output and exit with 
+  status code 0 without performing any other action. If a subcommand is present, 
+  prefer subcommand-specific help; otherwise show global help. When help is 
+  requested, ignore all other flags and arguments and exit successfully.
+
+* `-V`, `--version`: Print only the tool name and version to standard output as 
+  a single stable line `bus-accounts <version>` and exit with status code 0 
+  without performing any other action. Ignore all other flags and arguments when 
+  version is requested.
+
+* `-v`, `--verbose`: Enable verbose informational output for humans. Verbose 
+  output must be written to standard error so that standard output remains 
+  reserved for command results. Verbosity can be repeated and accumulates: `-v` 
+  sets verbosity to at least 1, `-vv` to 2, etc. Verbose output must not alter 
+  the structured output written to standard output (or to the file selected by 
+  `--output`). Verbose output must never be required for correctness.
+
+* `-q`, `--quiet`: Suppress all normal non-error output. When quiet is enabled, 
+  the tool must not print command result output to standard output and must not 
+  print informational or verbose messages; only error messages may be printed to 
+  standard error. Quiet must not change exit codes. If quiet and verbose are both 
+  provided, treat as invalid usage: print a short error to standard error and 
+  exit with status code 2.
+
+* `-C <dir>`, `--chdir <dir>`: Change the effective working directory for the 
+  command before any file resolution or I/O occurs. All module paths (for example 
+  `accounts/accounts.csv` and its beside-the-CSV schema file) must be resolved 
+  relative to this directory. If the directory does not exist or is not 
+  accessible, print a clear error to standard error and exit with status code 1.
+
+* `-o <file>`, `--output <file>`: Redirect normal command output to the 
+  specified file path instead of standard output. Errors still go to standard 
+  error. Create the file if it does not exist; truncate it if it exists. If the 
+  file cannot be created or written, print a clear error to standard error and 
+  exit with status code 1. If `--output` is used together with `--quiet`, quiet 
+  wins: do not write output to stdout and do not write the output file either; 
+  still perform the command work and exit with correct status.
+
+* `-f <format>`, `--format <format>`: Select the output format for commands 
+  that produce structured results. The default must be stable and documented (for 
+  example `tsv`). Supported formats must be explicitly listed in help. Unknown 
+  formats are invalid usage: print a short error to standard error and exit with 
+  status code 2. Format selection must only affect the command result output, not 
+  validation behavior. For commands that do not produce a result set (for example 
+  `validate`), choose one consistent behavior and document it: either ignore 
+  `--format` safely or treat it as invalid usage. Implement your chosen behavior 
+  consistently.
+
+* `--color <mode>`: Control colored/styled terminal output for human-facing 
+  messages. `<mode>` must be one of `auto`, `always`, or `never`. `auto` enables 
+  color only when stderr is a terminal and the environment supports it; `always` 
+  forces color; `never` disables it. Color settings must apply only to 
+  human-facing text printed to standard error (help, diagnostics). Structured 
+  outputs written to standard output or to `--output` must never contain color 
+  control sequences unless the selected format explicitly requires it (it must 
+  not for this tool). Invalid mode is invalid usage: print a short error to 
+  standard error and exit with status code 2.
+
+* `--no-color`: Alias for `--color=never`. If both are present, the most 
+  restrictive applies: color must be disabled.
+
+* `--`: Terminates global flag parsing. All following tokens are positional 
+  arguments for the subcommand and must be passed through exactly.
+
+Implementation requirements for help output. Global help must list the two 
+subcommands supported by this tool and the global flags described above, 
+including defaults and examples showing repeated verbosity (for example `-vv`). 
+Subcommand help must include the command name, one-line purpose, and mention 
+which flags affect it (for example `list` output format). Keep help concise and 
+stable.
+
+Testing requirements. Add or update unit tests to cover flag parsing and 
+behavior. Tests must verify at least: `-vv` sets verbosity level 2; repeated 
+`--verbose` increments; `--` stops parsing; help exits 0 and ignores other 
+args; version exits 0 and ignores other args; quiet suppresses stdout and also 
+prevents writing `--output`; quiet+verbose produces usage error exit code 2; 
+invalid `--color` mode yields exit code 2; unknown `--format` yields exit code 
+2; `-C` changes effective workdir (verify by placing fixtures under that 
+directory and running the command successfully); `--output` writes expected 
+content on success and truncates an existing file; and error messages remain on 
+stderr. Ensure `go test ./...` passes.
+
+Documentation requirements. Update README.md to include a flat, explicit 
+description of every flag, its exit code behavior, and where output is written 
+(stdout vs stderr vs output file). Include a short example demonstrating `-vv` 
+and `--` usage. 
