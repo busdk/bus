@@ -84,7 +84,48 @@ usage: bus <command> [args...]
 
 available commands:
   accounts
+  assets
+  attachments
+  bank
+  budget
+  entities
+  filing
+  filing-prh
+  filing-vero
+  inventory
+  invoices
+  journal
+  payroll
+  period
+  reconcile
+  reports
+  validate
+  vat
 ```
+
+This list comes from scanning your `PATH`. If you install additional `bus-*`
+executables, they will appear here automatically.
+
+Example module binaries that `bus` can dispatch to include:
+
+- `bus-accounts`
+- `bus-assets`
+- `bus-attachments`
+- `bus-bank`
+- `bus-budget`
+- `bus-entities`
+- `bus-filing`
+- `bus-filing-prh`
+- `bus-filing-vero`
+- `bus-inventory`
+- `bus-invoices`
+- `bus-journal`
+- `bus-payroll`
+- `bus-period`
+- `bus-reconcile`
+- `bus-reports`
+- `bus-validate`
+- `bus-vat`
 
 Dispatching to a module binary:
 
