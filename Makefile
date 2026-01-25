@@ -1,32 +1,38 @@
-APP_NAME := bus
+BIN_DIR := bin
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 INSTALL ?= install
 
-.PHONY: all build test fmt check install uninstall clean
+BINARY ?= $(notdir $(abspath $(CURDIR)))
+CMD_PKG := ./cmd/$(BINARY)
+
+.PHONY: all build test fmt lint check install uninstall clean
 
 all: build
 
 build:
-	mkdir -p bin
-	go build -o bin/$(APP_NAME) ./cmd/$(APP_NAME)
+	mkdir -p $(BIN_DIR)
+	go build -o $(BIN_DIR)/$(BINARY) $(CMD_PKG)
 
 test:
 	go test ./...
 
 fmt:
-	gofmt -w ./cmd ./internal
+	gofmt -w .
+
+lint:
+	go vet ./...
 
 check: fmt test
 
 install: build
 	mkdir -p "$(BINDIR)"
-	$(INSTALL) -m 0755 "bin/$(APP_NAME)" "$(BINDIR)/$(APP_NAME)"
-	@printf "installed %s\nensure %s is on your PATH\n" "$(BINDIR)/$(APP_NAME)" "$(BINDIR)"
+	$(INSTALL) -m 0755 $(BIN_DIR)/$(BINARY) "$(BINDIR)/$(BINARY)"
+	@echo "Installed $(BINDIR)/$(BINARY). Ensure $(BINDIR) is on PATH."
 
 uninstall:
-	rm -f "$(BINDIR)/$(APP_NAME)"
-	@printf "removed %s (if it existed)\n" "$(BINDIR)/$(APP_NAME)"
+	rm -f "$(BINDIR)/$(BINARY)"
+	@echo "Removed $(BINDIR)/$(BINARY) if it existed."
 
 clean:
-	rm -rf bin
+	rm -rf $(BIN_DIR)
