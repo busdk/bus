@@ -18,17 +18,17 @@ else
 fi
 
 echo
-echo "--- COMMITTING UNCHANGED TO GIT ---"
+echo "--- $NAME ---"
 echo
 
-if timeout "$TASK_TIMEOUT" cursor-agent -p --output-format "$OUTPUT_FORMAT" -f --model "$MODEL" -- "$(cat "$MDC_FILE")\nCommit all staged changes using as semantically small commits as possible with meaningful commit messages. Do nothing else."; then
+if timeout "$TASK_TIMEOUT" cursor-agent -p --output-format "$OUTPUT_FORMAT" -f --model "$MODEL" -- "$(cat "$MDC_FILE")\n\nImplement this project."; then
   echo
-  echo '--- SUCCESSFUL COMMIT ---'
+  echo '--- SUCCESSFUL:$NAME ---'
   echo
 else
   ERRNO="$?"
   echo
-  echo '--- COMMIT ERROR:'"$ERRNO"' ---'
+  echo '--- ERROR:$NAME:'"$ERRNO"' ---'
   echo
   exit 1
 fi
