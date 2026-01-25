@@ -1,0 +1,29 @@
+---
+description: "BusDK Design Document Reference"
+alwaysApply: true
+globs: ["*"]
+---
+
+The canonical BusDK design document is published at https://docs.busdk.com/ and 
+must be used as the primary reference for architecture, data formats, CLI 
+conventions, module responsibilities, and workspace layout.
+
+Before proposing or implementing any feature, align your decisions with the 
+design document’s principles (modular subcommand binaries, Git-native 
+workflows, open long-lived formats like UTF-8 CSV with Frictionless Table 
+Schema JSON, and transparent auditable operations). If an implementation detail 
+is unclear, consult the design document first and follow its conventions rather 
+than inventing new ones.
+
+If you discover conflicts between existing code and the design document, do not 
+assume either is correct by default. Describe the conflict explicitly (what the 
+document says, what the code does, and where the mismatch is). Then propose one 
+or more resolution options, including which side to change and why, with the 
+impact on users, data formats, compatibility, and module boundaries.
+
+If resolving the conflict requires updating the design document, treat that as 
+a first-class outcome: specify the exact wording or section-level edits needed, 
+explain the business or technical rationale, and ensure the change remains 
+consistent with BusDK’s goals (deterministic behavior, auditable workflows, and 
+agent-friendly automation). Only proceed with implementation once the chosen 
+resolution is clearly stated and the implied contract is unambiguous.
