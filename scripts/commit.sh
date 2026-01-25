@@ -3,6 +3,13 @@ cd "$(dirname "$0")/.."
 set -e
 #set -x
 
+if git status|grep -qE 'nothing to commit, working tree clean'; then
+  echo
+  echo "--- nothing to commit, working tree clean ---"
+  echo
+  exit 0
+fi
+
 MODEL=gpt-5.2
 OUTPUT_FORMAT=stream-json
 TASK_TIMEOUT=15m
