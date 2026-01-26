@@ -19,7 +19,8 @@ echo
 echo "--- COMMITTING UNCHANGED TO GIT ---"
 echo
 
-if timeout "$TASK_TIMEOUT" cursor-agent -p --output-format "$OUTPUT_FORMAT" -f --model "$MODEL" -- "$(cat "$MDC_FILE")\nCommit all staged changes using as semantically small commits as possible with meaningful commit messages. Do nothing else."; then
+if timeout "$TASK_TIMEOUT" cursor-agent -p --output-format "$OUTPUT_FORMAT" -f --model "$MODEL" -- "$(cat "$MDC_FILE")\nCommit all staged changes using as semantically small commits as possible with meaningful commit messages. Do nothing else." \
+    |./scripts/format-cursor-log.sh --only-roles=assistant,user,system; then
   echo
   echo '--- SUCCESSFUL COMMIT ---'
   echo
