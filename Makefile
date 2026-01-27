@@ -23,7 +23,7 @@ fmt:
 lint:
 	go vet ./...
 
-check: fmt test
+check: fmt lint test
 
 install: build
 	mkdir -p "$(BINDIR)"
