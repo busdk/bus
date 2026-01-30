@@ -1,4 +1,6 @@
 #!/bin/bash
+SCRIPT_ABS="$(realpath "$0")"
+
 cd "$(dirname "$0")/.."
 set -e
 #set -x
@@ -10,9 +12,11 @@ if git status|grep -qE 'nothing to commit, working tree clean'; then
   exit 0
 fi
 
-MODEL=gpt-5.2
+MODEL=gpt-5.2-codex-high
 OUTPUT_FORMAT=stream-json
 TASK_TIMEOUT=15m
+
+BASEFILE=$()
 
 echo
 echo "--- COMMITTING UNCHANGED TO GIT ---"
@@ -20,7 +24,7 @@ echo
 
 if timeout "$TASK_TIMEOUT" cursor-agent -p --output-format "$OUTPUT_FORMAT" \
       -f --model "$MODEL" agent \
-      -- "$(awk 'f{print} /^### PROMPT ###$/{f=1}' "$0")" \
+      -- "$(awk 'f{print} /^### PROMPT ###$/{f=1}' "$SCRIPT_ABS")" \
     |./scripts/format-cursor-log.sh --only-roles=assistant,user,system; then
   echo
   echo '--- SUCCESSFUL COMMIT ---'
