@@ -21,7 +21,15 @@ echo
 echo "--- refine-mdc-spec: $NAME ---"
 echo
 
-PROMPT="$(cat "$MDC_FILE")\n\n$(awk 'f{print} /^### PROMPT ###$/{f=1}' "$0")"
+# Build an expanded, concrete prompt (no ${NAME} placeholders)
+PROMPT="$(
+  cat "$MDC_FILE"
+  printf "\n\n"
+  # Expand {{MODULE_NAME}} and {{MDC_FILE}} inside the embedded prompt
+  awk 'f{print} /^### PROMPT ###$/{f=1}' "$0" \
+    | sed "s/{{MODULE_NAME}}/$NAME/g" \
+    | sed "s|{{MDC_FILE}}|$MDC_FILE|g"
+)"
 
 if timeout "$TASK_TIMEOUT" cursor-agent -p --output-format "$OUTPUT_FORMAT" -f \
     --model "$MODEL" agent -- \
@@ -42,11 +50,11 @@ exit 0
 ### PROMPT ###
 ------
 
-Goal. Update only the Cursor MDC rule file at .cursor/rules/${NAME}.mdc so that 
-it accurately reflects the latest BusDK specifications at 
-https://docs.busdk.com/. Do not change source code, tests, schemas, README.md, 
-or any other files in this task. This task is complete only when the MDC file 
-is refined and saved with improved, spec-aligned guidance.
+Goal. Refine only the Cursor MDC rule file at {{MDC_FILE}} for module 
+{{MODULE_NAME}} so that it accurately reflects the latest BusDK specifications 
+at https://docs.busdk.com/. Do not change source code, tests, schemas, 
+README.md, or any other files in this task. The task is complete only when the 
+MDC file is updated and saved with improved, spec-aligned guidance.
 
 Spec review. Read and use the BusDK documentation as the primary reference. 
 Start from https://docs.busdk.com/ and locate the most relevant pages for this 
@@ -83,9 +91,8 @@ and minimal ambiguity).
 Module scope. Ensure the MDC states the exact purpose of this module, its 
 inputs and outputs at a high level (datasets, schemas, and side effects), and 
 its explicit non-goals. Ensure the MDC states how this module is invoked from 
-the bus dispatcher (binary name bus-${NAME} if applicable, or whatever the 
-repository’s dispatcher contract is), and how it should behave regarding 
-stdout/stderr, exit codes, and dry-run.
+the bus dispatcher (binary name and invocation pattern), and how it should 
+behave regarding stdout/stderr, exit codes, and dry-run.
 
 Quality gates. Ensure the MDC instructs the agent to follow BusDK’s 
 deterministic workflow expectations, with fast hermetic tests, no network 
@@ -93,6 +100,6 @@ dependence, and a standard Makefile interface (build, test, lint, fmt) if that
 is part of the BusDK spec for modules. Only include requirements that are 
 supported by the spec or clearly established by this repo’s conventions.
 
-Deliverable. Save the refined MDC file at .cursor/rules/${NAME}.mdc. After 
-updating it, provide a short summary of what changed and which spec pages were 
-most important, so reviewers can verify the refinement quickly.
+Deliverable. Save the refined MDC file at {{MDC_FILE}}. After updating it, 
+provide a short summary of what changed and which spec pages were most 
+important, so reviewers can verify the refinement quickly.
