@@ -1,0 +1,3 @@
+- [ ] When first argument is `help` and `bus-help` is not on PATH, show usage and available commands then exit 2 (per docs.busdk.com/cli/command-structure).
+- [ ] Add end-to-end bash test(s) for bus no-args, missing subcommand, and successful dispatch per SDD testing strategy.
+- [ ] Add CONTRIBUTING.md so the README reference is valid, or update README to remove the reference.
