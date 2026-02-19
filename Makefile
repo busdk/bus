@@ -6,7 +6,7 @@ INSTALL ?= install
 BINARY ?= $(notdir $(abspath $(CURDIR)))
 CMD_PKG := ./cmd/$(BINARY)
 
-.PHONY: all build test fmt lint check install uninstall clean
+.PHONY: all build test e2e fmt lint check install uninstall clean
 
 all: build
 
@@ -17,13 +17,16 @@ build:
 test:
 	go test ./...
 
+e2e: build
+	bash ./tests/e2e_bus_bus.sh
+
 fmt:
 	gofmt -w .
 
 lint:
 	go vet ./...
 
-check: fmt lint test
+check: fmt lint test e2e
 
 install: build
 	mkdir -p "$(BINDIR)"

@@ -69,6 +69,53 @@ func TestRunMissingSubcommand(t *testing.T) {
 	}
 }
 
+func TestRunHelpWithoutSubcommandBinary(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "HELP")
+	env := setEnv(os.Environ(), "PATH", tempDir)
+
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "help"}, env, nil, io.Discard, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	output := stderr.String()
+	if !strings.Contains(output, "usage: bus <command> [args...]") {
+		t.Fatalf("expected usage output, got %q", output)
+	}
+	if strings.Contains(output, "missing subcommand") {
+		t.Fatalf("unexpected missing subcommand output, got %q", output)
+	}
+	if !strings.Contains(output, "available commands:") {
+		t.Fatalf("expected available commands, got %q", output)
+	}
+	if !strings.Contains(output, "accounts") {
+		t.Fatalf("expected discovered command in help output, got %q", output)
+	}
+}
+
+func TestRunHelpDispatchesWhenBinaryExists(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "help", "HELPER")
+	env := setEnv(os.Environ(), "PATH", tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "help", "accounts"}, env, nil, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "HELPER:accounts\n" {
+		t.Fatalf("expected stdout %q, got %q", "HELPER:accounts\n", stdout.String())
+	}
+}
+
 func TestRunDispatchesAndPassesArgs(t *testing.T) {
 	t.Parallel()
 

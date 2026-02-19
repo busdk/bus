@@ -24,6 +24,10 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 
 	path, err := lookPathEnv(executable, env)
 	if err != nil {
+		if subcommand == "help" {
+			writeUsage(env, stderr)
+			return 2
+		}
 		fmt.Fprintf(stderr, "bus: missing subcommand: %s; expected executable named %s in PATH\n", subcommand, executable)
 		writeUsage(env, stderr)
 		return 127
