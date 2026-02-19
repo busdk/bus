@@ -34,3 +34,6 @@ bin/
 
 # macOS
 .DS_Store
+
+# local bus development lock artifact
+.bus-dev.lock
