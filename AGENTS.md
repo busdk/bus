@@ -1,5 +1,7 @@
 # AGENTS.md — bus dispatcher
 
+Merged guidance from `.cursor/rules/*.mdc`.
+
 Agent-facing instructions for the `bus` core dispatcher repository. This module is the top-level CLI dispatcher and must remain minimal. Canonical design is the BusDK spec; this file consolidates local, actionable guidance.
 
 ## Project overview
@@ -80,3 +82,8 @@ This AGENTS.md was grounded in the following BusDK spec pages:
 - [docs.busdk.com/architecture/independent-modules](https://docs.busdk.com/architecture/independent-modules) — module boundaries, no CLI-to-CLI as API
 - [docs.busdk.com/cli/error-handling-dry-run-diagnostics](https://docs.busdk.com/cli/error-handling-dry-run-diagnostics) — exit codes, stderr diagnostics, script-friendly behavior
 - [docs.busdk.com/sdd/modules](https://docs.busdk.com/sdd/modules) — module index (dispatcher described in main SDD, not a separate module SDD)
+
+## Gitignore Rule
+
+1. .bus MUST be tracked; never add .bus or .bus/ to .gitignore.
+2. Runtime lock artifacts such as .bus-dev.lock may be ignored.
