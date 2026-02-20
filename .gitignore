@@ -37,3 +37,7 @@ bin/
 
 # local bus development lock artifact
 .bus-dev.lock
+
+# local Go caches/temp dirs
+.gocache/
+.gotmp/
