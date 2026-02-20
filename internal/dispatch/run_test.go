@@ -35,6 +35,9 @@ func TestRunNoArgs(t *testing.T) {
 	if !strings.Contains(stderr.String(), "usage: bus <command> [args...]") {
 		t.Fatalf("expected usage message, got %q", stderr.String())
 	}
+	if !strings.Contains(stderr.String(), "did you mean `bus shell`?") {
+		t.Fatalf("expected shell suggestion, got %q", stderr.String())
+	}
 	if !strings.Contains(stderr.String(), "available commands:") {
 		t.Fatalf("expected subcommand list header, got %q", stderr.String())
 	}
@@ -67,6 +70,9 @@ func TestRunMissingSubcommand(t *testing.T) {
 	if !strings.Contains(stderr.String(), "usage: bus <command> [args...]") {
 		t.Fatalf("expected usage after error, got %q", stderr.String())
 	}
+	if !strings.Contains(stderr.String(), "did you mean `bus shell`?") {
+		t.Fatalf("expected shell suggestion after error, got %q", stderr.String())
+	}
 }
 
 func TestRunHelpWithoutSubcommandBinary(t *testing.T) {
@@ -85,6 +91,9 @@ func TestRunHelpWithoutSubcommandBinary(t *testing.T) {
 	output := stderr.String()
 	if !strings.Contains(output, "usage: bus <command> [args...]") {
 		t.Fatalf("expected usage output, got %q", output)
+	}
+	if !strings.Contains(output, "did you mean `bus shell`?") {
+		t.Fatalf("expected shell suggestion, got %q", output)
 	}
 	if strings.Contains(output, "missing subcommand") {
 		t.Fatalf("unexpected missing subcommand output, got %q", output)
@@ -135,6 +144,9 @@ func TestRunGlobalHelpShortCircuits(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "usage: bus [global-flags] <command> [args...]") {
 		t.Fatalf("expected global help usage, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "use `bus shell` for interactive command entry") {
+		t.Fatalf("expected shell tip in global help, got %q", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "available commands:") {
 		t.Fatalf("expected available commands in help, got %q", stdout.String())
@@ -344,6 +356,7 @@ func TestRunNoArgsProperties(t *testing.T) {
 		}
 		output := stderr.String()
 		return strings.Contains(output, "usage: bus <command> [args...]") &&
+			strings.Contains(output, "did you mean `bus shell`?") &&
 			!strings.Contains(output, "available commands:")
 	}
 

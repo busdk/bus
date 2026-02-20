@@ -1614,6 +1614,7 @@ func parseGlobalFlags(args []string) (parseResult, error) {
 
 func writeUsage(env []string, stderr io.Writer) {
 	fmt.Fprintln(stderr, "usage: bus <command> [args...]")
+	fmt.Fprintln(stderr, "tip: did you mean `bus shell`?")
 	subcommands := listSubcommands(env)
 	if len(subcommands) == 0 {
 		return
@@ -1627,6 +1628,7 @@ func writeUsage(env []string, stderr io.Writer) {
 
 func writeHelp(env []string, stdout io.Writer) {
 	fmt.Fprintln(stdout, "usage: bus [global-flags] <command> [args...]")
+	fmt.Fprintln(stdout, "tip: use `bus shell` for interactive command entry")
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Global flags:")
 	fmt.Fprintln(stdout, "  -h, --help")

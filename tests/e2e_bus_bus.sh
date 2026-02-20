@@ -74,6 +74,7 @@ TEST_PATH="${WORK_DIR}/path_first:${WORK_DIR}/path_second"
 
 cat > "$WORK_DIR/expected_usage.err" <<'EOF_EXPECT_USAGE'
 usage: bus <command> [args...]
+tip: did you mean `bus shell`?
 
 available commands:
   accounts
@@ -96,6 +97,7 @@ grep -q '^available commands:$' "$WORK_DIR/noargs.err"
 cat > "$WORK_DIR/expected_missing.err" <<'EOF_EXPECT_MISSING'
 bus: missing subcommand: missing; expected executable named bus-missing in PATH
 usage: bus <command> [args...]
+tip: did you mean `bus shell`?
 
 available commands:
   accounts
