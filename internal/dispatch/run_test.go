@@ -576,13 +576,13 @@ func TestRunBusfileExecutesCommands(t *testing.T) {
 
 	tempDir := t.TempDir()
 	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
-	buildFakeSubcommand(t, tempDir, "journal", "JOURNAL")
+	buildFakeSubcommand(t, tempDir, "ledger", "LEDGER")
 
 	busfile := filepath.Join(tempDir, "2024-02.bus")
 	content := strings.Join([]string{
 		"# month file",
 		"accounts add --code 3000",
-		"journal add --date 2024-02-29 --debit 1910=10.00 --credit 3000=10.00 --desc 'M2'",
+		"ledger post --id m2",
 		"",
 	}, "\n")
 	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
@@ -600,8 +600,8 @@ func TestRunBusfileExecutesCommands(t *testing.T) {
 	if !strings.Contains(got, "ACCOUNTS:add --code 3000\n") {
 		t.Fatalf("expected accounts invocation, got %q", got)
 	}
-	if !strings.Contains(got, "JOURNAL:add --date 2024-02-29 --debit 1910=10.00 --credit 3000=10.00 --desc M2\n") {
-		t.Fatalf("expected journal invocation, got %q", got)
+	if !strings.Contains(got, "LEDGER:post --id m2\n") {
+		t.Fatalf("expected ledger invocation, got %q", got)
 	}
 }
 

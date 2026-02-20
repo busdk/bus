@@ -156,7 +156,7 @@ accounts jan
 EOF_202401
 
 cat > "$WORK_DIR/2024-02.bus" <<'EOF_202402'
-journal feb
+ledger feb
 EOF_202402
 
 cat > "$WORK_DIR/all.bus" <<'EOF_ALL'
@@ -165,7 +165,7 @@ cat > "$WORK_DIR/all.bus" <<'EOF_ALL'
 EOF_ALL
 
 PATH="$TEST_PATH" "$BIN_PATH" "$WORK_DIR/all.bus" > "$WORK_DIR/busfile.out" 2> "$WORK_DIR/busfile.err"
-diff -u <(printf 'ACCOUNTS:jan\nJOURNAL:feb\n') "$WORK_DIR/busfile.out"
+diff -u <(printf 'ACCOUNTS:jan\nLEDGER:feb\n') "$WORK_DIR/busfile.out"
 ! test -s "$WORK_DIR/busfile.err"
 
 cat > "$WORK_DIR/bad.bus" <<'EOF_BAD'
@@ -255,6 +255,73 @@ set -e
 test "$shell_off_code" -eq 127
 ! test -s "$WORK_DIR/shell_off.out"
 grep -q 'shell lookup disabled and no in-process runner' "$WORK_DIR/shell_off.err"
+
+cat > "$WORK_DIR/datapackage.json" <<'EOF_DP_FS_BATCH'
+{"bus":{"busfile":{"transaction":{"provider":"fs","scope":"batch","fallback_to_none":false}}}}
+EOF_DP_FS_BATCH
+cat > "$WORK_DIR/fs_ok.bus" <<'EOF_FS_OK'
+txwrite fs/data.txt one
+txwrite fs/data.txt two
+EOF_FS_OK
+(cd "$WORK_DIR" && BUS_TEST_ENABLE_TXWRITE=1 PATH="$TEST_PATH" "$BIN_PATH" fs_ok.bus > "$WORK_DIR/fs_ok.out" 2> "$WORK_DIR/fs_ok.err")
+! test -s "$WORK_DIR/fs_ok.out"
+! test -s "$WORK_DIR/fs_ok.err"
+diff -u <(printf 'one\ntwo\n') "$WORK_DIR/fs/data.txt"
+
+cat > "$WORK_DIR/fs_fail.bus" <<'EOF_FS_FAIL'
+txwrite fs/rollback.txt one
+txwrite fs/rollback.txt fail
+EOF_FS_FAIL
+set +e
+(cd "$WORK_DIR" && BUS_TEST_ENABLE_TXWRITE=1 PATH="$TEST_PATH" "$BIN_PATH" fs_fail.bus > "$WORK_DIR/fs_fail.out" 2> "$WORK_DIR/fs_fail.err")
+fs_fail_code=$?
+set -e
+test "$fs_fail_code" -eq 1
+! test -s "$WORK_DIR/fs_fail.out"
+grep -q 'command failed (exit 1)' "$WORK_DIR/fs_fail.err"
+! test -e "$WORK_DIR/fs/rollback.txt"
+
+awk 'BEGIN { for (i = 0; i < 100000; i++) printf("%d,alpha,beta\n", i) }' > "$WORK_DIR/fs/big.csv"
+cat > "$WORK_DIR/fs_big.bus" <<'EOF_FS_BIG'
+txwrite fs/big.csv 100000,omega,zeta
+EOF_FS_BIG
+(cd "$WORK_DIR" && BUS_TEST_ENABLE_TXWRITE=1 PATH="$TEST_PATH" "$BIN_PATH" fs_big.bus > "$WORK_DIR/fs_big.out" 2> "$WORK_DIR/fs_big.err")
+! test -s "$WORK_DIR/fs_big.out"
+! test -s "$WORK_DIR/fs_big.err"
+diff -u <(printf '100000,omega,zeta\n') <(tail -n 1 "$WORK_DIR/fs/big.csv")
+
+REAL_FS_DIR="$WORK_DIR/fs_real_module"
+mkdir -p "$REAL_FS_DIR"
+cat > "$REAL_FS_DIR/datapackage.json" <<'EOF_REAL_FS_DP'
+{"bus":{"busfile":{"transaction":{"provider":"fs","scope":"batch","fallback_to_none":false}}}}
+EOF_REAL_FS_DP
+cat > "$REAL_FS_DIR/ok.bus" <<'EOF_REAL_FS_OK'
+bank init
+EOF_REAL_FS_OK
+(cd "$REAL_FS_DIR" && PATH="$TEST_PATH" "$BIN_PATH" ok.bus > "$REAL_FS_DIR/ok.out" 2> "$REAL_FS_DIR/ok.err")
+! test -s "$REAL_FS_DIR/ok.out"
+! test -s "$REAL_FS_DIR/ok.err"
+test -f "$REAL_FS_DIR/bank-imports.csv"
+test -f "$REAL_FS_DIR/bank-transactions.csv"
+
+FAIL_FS_DIR="$WORK_DIR/fs_real_module_fail"
+mkdir -p "$FAIL_FS_DIR"
+cat > "$FAIL_FS_DIR/datapackage.json" <<'EOF_FAIL_FS_DP'
+{"bus":{"busfile":{"transaction":{"provider":"fs","scope":"batch","fallback_to_none":false}}}}
+EOF_FAIL_FS_DP
+cat > "$FAIL_FS_DIR/fail.bus" <<'EOF_FAIL_FS'
+bank init
+bank nope
+EOF_FAIL_FS
+set +e
+(cd "$FAIL_FS_DIR" && PATH="$TEST_PATH" "$BIN_PATH" fail.bus > "$FAIL_FS_DIR/fail.out" 2> "$FAIL_FS_DIR/fail.err")
+real_fs_fail_code=$?
+set -e
+test "$real_fs_fail_code" -eq 2
+! test -s "$FAIL_FS_DIR/fail.out"
+grep -q 'command failed (exit 2)' "$FAIL_FS_DIR/fail.err"
+! test -e "$FAIL_FS_DIR/bank-imports.csv"
+! test -e "$FAIL_FS_DIR/bank-transactions.csv"
 
 set +e
 PATH="$TEST_PATH" "$BIN_PATH" fail sample > "$WORK_DIR/fail.out" 2> "$WORK_DIR/fail.err"

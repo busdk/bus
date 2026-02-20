@@ -3,6 +3,7 @@ package dispatch
 import (
 	"bufio"
 	"bus/internal/txfs"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,9 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	bankentry "github.com/busdk/bus-bank/pkg/entry"
+	journalentry "github.com/busdk/bus-journal/pkg/entry"
 )
 
 const version = "dev"
@@ -136,8 +140,38 @@ func (e hybridBusfileExecutor) Execute(command busfileCommand, env []string, std
 type inProcessModuleRunner func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error)
 type inProcessTxModuleRunner func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error)
 
-var inProcessModuleRunners = map[string]inProcessModuleRunner{}
-var inProcessTxModuleRunners = map[string]inProcessTxModuleRunner{}
+var inProcessModuleRunners = map[string]inProcessModuleRunner{
+	"bank": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
+		workdir, err := os.Getwd()
+		if err != nil {
+			return 1, err
+		}
+		return bankentry.Run(args, workdir, stdout, stderr), nil
+	},
+	"journal": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
+		workdir, err := os.Getwd()
+		if err != nil {
+			return 1, err
+		}
+		return journalentry.Run(args, workdir, stdin, stdout, stderr, false), nil
+	},
+}
+var inProcessTxModuleRunners = map[string]inProcessTxModuleRunner{
+	"bank": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error) {
+		return runModuleViaTempWorkspaceAndMerge(args, env, stdin, stdout, stderr, fs, inProcessModuleRunners["bank"])
+	},
+	"journal": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error) {
+		return runModuleViaTempWorkspaceAndMerge(args, env, stdin, stdout, stderr, fs, inProcessModuleRunners["journal"])
+	},
+}
+
+type fsTxJournal struct {
+	State   string   `json:"state"`
+	Scope   string   `json:"scope"`
+	TxID    string   `json:"tx_id"`
+	Files   []string `json:"files,omitempty"`
+	Updated string   `json:"updated"`
+}
 
 type busfileCommand struct {
 	File string
@@ -240,6 +274,7 @@ func parseBusfileMode(args []string) (busfileOptions, bool, error) {
 }
 
 func runBusfiles(opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	registerTestBusfileRunners(env)
 	cfg := loadBusfileConfig()
 	return runBusfilesWithExecutor(opts, env, stdin, stdout, stderr, cfg)
 }
@@ -459,6 +494,10 @@ func executeBusfileCommandsFS(commands []busfileCommand, opts busfileOptions, en
 		fmt.Fprintf(stderr, "bus: transaction provider \"fs\" failed to resolve workspace: %v\n", err)
 		return 1
 	}
+	if err := recoverPendingFSTransactions(workspaceRoot, stderr); err != nil {
+		fmt.Fprintf(stderr, "bus: transaction provider \"fs\" recovery failed: %v\n", err)
+		return 1
+	}
 
 	var units [][]busfileCommand
 	switch cfg.transactionScope {
@@ -475,7 +514,7 @@ func executeBusfileCommandsFS(commands []busfileCommand, opts busfileOptions, en
 		if len(unit) == 0 {
 			continue
 		}
-		code, runErr := executeFSUnit(unit, opts, env, stdin, stdout, stderr, workspaceRoot)
+		code, runErr := executeFSUnit(unit, opts, env, stdin, stdout, stderr, workspaceRoot, cfg.transactionScope)
 		if runErr != nil {
 			if bf, ok := runErr.(busfileError); ok {
 				fmt.Fprintln(stderr, bf.Error())
@@ -504,10 +543,11 @@ func partitionCommandsByFile(commands []busfileCommand) [][]busfileCommand {
 	return units
 }
 
-func executeFSUnit(commands []busfileCommand, opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, workspaceRoot string) (int, error) {
+func executeFSUnit(commands []busfileCommand, opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, workspaceRoot string, scope string) (int, error) {
 	txID := fmt.Sprintf("%d-%d", time.Now().UnixNano(), os.Getpid())
 	txRoot := filepath.Join(workspaceRoot, ".bus", "tx", txID)
 	overlayRoot := filepath.Join(txRoot, "overlay")
+	journalPath := filepath.Join(txRoot, "journal.json")
 
 	if err := os.MkdirAll(filepath.Dir(overlayRoot), 0o755); err != nil {
 		return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to initialize: %v", err)
@@ -515,6 +555,17 @@ func executeFSUnit(commands []busfileCommand, opts busfileOptions, env []string,
 	fsOverlay, err := txfs.New(workspaceRoot, overlayRoot)
 	if err != nil {
 		return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to initialize: %v", err)
+	}
+	if scope == "batch" {
+		if err := writeFSTxJournal(journalPath, fsTxJournal{
+			State:   "begun",
+			Scope:   scope,
+			TxID:    txID,
+			Files:   uniqueCommandFiles(commands),
+			Updated: time.Now().UTC().Format(time.RFC3339Nano),
+		}); err != nil {
+			return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to write journal: %v", err)
+		}
 	}
 
 	for _, command := range commands {
@@ -536,15 +587,94 @@ func executeFSUnit(commands []busfileCommand, opts busfileOptions, env []string,
 		}
 	}
 
+	if scope == "batch" {
+		if err := writeFSTxJournal(journalPath, fsTxJournal{
+			State:   "committing",
+			Scope:   scope,
+			TxID:    txID,
+			Files:   uniqueCommandFiles(commands),
+			Updated: time.Now().UTC().Format(time.RFC3339Nano),
+		}); err != nil {
+			_ = fsOverlay.Rollback()
+			_ = os.RemoveAll(txRoot)
+			return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to write journal: %v", err)
+		}
+	}
 	if err := fsOverlay.Commit(); err != nil {
 		_ = fsOverlay.Rollback()
 		_ = os.RemoveAll(txRoot)
 		return 1, fmt.Errorf("bus: transaction provider \"fs\" commit failed: %v", err)
 	}
+	if scope == "batch" {
+		if err := writeFSTxJournal(journalPath, fsTxJournal{
+			State:   "committed",
+			Scope:   scope,
+			TxID:    txID,
+			Files:   uniqueCommandFiles(commands),
+			Updated: time.Now().UTC().Format(time.RFC3339Nano),
+		}); err != nil {
+			return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to finalize journal: %v", err)
+		}
+	}
 	if err := os.RemoveAll(txRoot); err != nil {
 		return 1, fmt.Errorf("bus: transaction provider \"fs\" cleanup failed: %v", err)
 	}
 	return 0, nil
+}
+
+func writeFSTxJournal(path string, journal fsTxJournal) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	body, err := json.MarshalIndent(journal, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(body, '\n'), 0o644)
+}
+
+func recoverPendingFSTransactions(workspaceRoot string, stderr io.Writer) error {
+	txRoot := filepath.Join(workspaceRoot, ".bus", "tx")
+	entries, err := os.ReadDir(txRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		path := filepath.Join(txRoot, entry.Name())
+		if !entry.IsDir() {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			fmt.Fprintf(stderr, "bus: warning: cleaned incomplete fs transaction artifact %s\n", path)
+			continue
+		}
+		journalPath := filepath.Join(path, "journal.json")
+		if _, err := os.Stat(journalPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+		fmt.Fprintf(stderr, "bus: warning: recovered incomplete fs transaction %s by cleanup\n", entry.Name())
+	}
+	return nil
+}
+
+func uniqueCommandFiles(commands []busfileCommand) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(commands))
+	for _, command := range commands {
+		if _, ok := seen[command.File]; ok {
+			continue
+		}
+		seen[command.File] = struct{}{}
+		out = append(out, command.File)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func runBusfileCommandFS(command busfileCommand, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fsOverlay *txfs.FS) (int, error) {
@@ -564,6 +694,296 @@ func runBusfileCommandFS(command busfileCommand, env []string, stdin io.Reader, 
 		return code, fmt.Errorf("command failed (exit %d): %s", code, command.Raw)
 	}
 	return 0, nil
+}
+
+func runModuleViaTempWorkspaceAndMerge(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fsOverlay *txfs.FS, runner inProcessModuleRunner) (int, error) {
+	workspaceRoot, err := os.Getwd()
+	if err != nil {
+		return 1, err
+	}
+	tmpRoot, err := os.MkdirTemp("", "bus-fs-module-*")
+	if err != nil {
+		return 1, err
+	}
+	defer os.RemoveAll(tmpRoot)
+	if err := copyWorkspaceTree(workspaceRoot, tmpRoot); err != nil {
+		return 1, err
+	}
+	oldWD, err := os.Getwd()
+	if err != nil {
+		return 1, err
+	}
+	if err := os.Chdir(tmpRoot); err != nil {
+		return 1, err
+	}
+	code, runErr := runner(args, env, stdin, stdout, stderr)
+	_ = os.Chdir(oldWD)
+	if runErr != nil {
+		return 1, runErr
+	}
+	if code != 0 {
+		return code, nil
+	}
+	if err := mergeWorkspaceChangesToTxFS(workspaceRoot, tmpRoot, fsOverlay); err != nil {
+		return 1, err
+	}
+	return 0, nil
+}
+
+func copyWorkspaceTree(srcRoot, dstRoot string) error {
+	return filepath.WalkDir(srcRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(srcRoot, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		if shouldIgnoreWorkspacePath(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		dstPath := filepath.Join(dstRoot, rel)
+		if d.IsDir() {
+			return os.MkdirAll(dstPath, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		return copyFile(srcRoot, rel, dstRoot, info.Mode().Perm())
+	})
+}
+
+func mergeWorkspaceChangesToTxFS(baseRoot, newRoot string, fsOverlay *txfs.FS) error {
+	baseFiles, err := listWorkspaceFiles(baseRoot)
+	if err != nil {
+		return err
+	}
+	newFiles, err := listWorkspaceFiles(newRoot)
+	if err != nil {
+		return err
+	}
+
+	for rel, newPath := range newFiles {
+		basePath, hadBase := baseFiles[rel]
+		if hadBase {
+			same, err := filesEqual(basePath, newPath)
+			if err != nil {
+				return err
+			}
+			if same {
+				continue
+			}
+		}
+		if err := writeIntoTxFS(fsOverlay, rel, newPath); err != nil {
+			return err
+		}
+	}
+	for rel := range baseFiles {
+		if _, ok := newFiles[rel]; ok {
+			continue
+		}
+		if err := fsOverlay.Remove(rel); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func listWorkspaceFiles(root string) (map[string]string, error) {
+	out := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		if shouldIgnoreWorkspacePath(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		out[rel] = path
+		return nil
+	})
+	return out, err
+}
+
+func shouldIgnoreWorkspacePath(rel string) bool {
+	if rel == ".git" || strings.HasPrefix(rel, ".git"+string(os.PathSeparator)) {
+		return true
+	}
+	if rel == ".bus/tx" || strings.HasPrefix(rel, ".bus/tx"+string(os.PathSeparator)) {
+		return true
+	}
+	return false
+}
+
+func copyFile(srcRoot, rel, dstRoot string, perm os.FileMode) error {
+	src := filepath.Join(srcRoot, rel)
+	dst := filepath.Join(dstRoot, rel)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, perm)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
+}
+
+func writeIntoTxFS(fsOverlay *txfs.FS, relPath string, sourcePath string) error {
+	in, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := fsOverlay.OpenFile(relPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
+}
+
+func filesEqual(a, b string) (bool, error) {
+	infoA, err := os.Stat(a)
+	if err != nil {
+		return false, err
+	}
+	infoB, err := os.Stat(b)
+	if err != nil {
+		return false, err
+	}
+	if infoA.Size() != infoB.Size() {
+		return false, nil
+	}
+	fa, err := os.Open(a)
+	if err != nil {
+		return false, err
+	}
+	defer fa.Close()
+	fb, err := os.Open(b)
+	if err != nil {
+		return false, err
+	}
+	defer fb.Close()
+	bufA := make([]byte, 64*1024)
+	bufB := make([]byte, 64*1024)
+	for {
+		nA, errA := fa.Read(bufA)
+		nB, errB := fb.Read(bufB)
+		if nA != nB {
+			return false, nil
+		}
+		if nA > 0 && !bytes.Equal(bufA[:nA], bufB[:nA]) {
+			return false, nil
+		}
+		if errors.Is(errA, io.EOF) && errors.Is(errB, io.EOF) {
+			return true, nil
+		}
+		if errA != nil && !errors.Is(errA, io.EOF) {
+			return false, errA
+		}
+		if errB != nil && !errors.Is(errB, io.EOF) {
+			return false, errB
+		}
+	}
+}
+
+func registerTestBusfileRunners(env []string) {
+	value, ok := lookupEnvSlice(env, "BUS_TEST_ENABLE_TXWRITE")
+	if !ok || value != "1" {
+		return
+	}
+	if _, exists := inProcessModuleRunners["txwrite"]; !exists {
+		inProcessModuleRunners["txwrite"] = func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
+			if len(args) != 2 {
+				return 2, fmt.Errorf("txwrite expects <path> <value>")
+			}
+			if args[1] == "fail" {
+				return 1, nil
+			}
+			if err := os.MkdirAll(filepath.Dir(args[0]), 0o755); err != nil {
+				return 1, err
+			}
+			f, err := os.OpenFile(args[0], os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+			if err != nil {
+				return 1, err
+			}
+			defer f.Close()
+			if _, err := io.WriteString(f, args[1]+"\n"); err != nil {
+				return 1, err
+			}
+			return 0, nil
+		}
+	}
+	if _, exists := inProcessTxModuleRunners["txwrite"]; !exists {
+		inProcessTxModuleRunners["txwrite"] = func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error) {
+			if len(args) != 2 {
+				return 2, fmt.Errorf("txwrite expects <path> <value>")
+			}
+			if args[1] == "fail" {
+				return 1, nil
+			}
+			f, err := fs.OpenFile(args[0], os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+			if err != nil {
+				return 1, err
+			}
+			defer f.Close()
+			if _, err := io.WriteString(f, args[1]+"\n"); err != nil {
+				return 1, err
+			}
+			return 0, nil
+		}
+	}
+}
+
+func lookupEnvSlice(env []string, key string) (string, bool) {
+	prefix := key + "="
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			return strings.TrimPrefix(entry, prefix), true
+		}
+	}
+	return "", false
 }
 
 func validateCommand(argv []string) error {
@@ -701,18 +1121,37 @@ func collectBusfileCommands(path string, stack map[string]bool, commands *[]busf
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	var logicalLine strings.Builder
+	logicalStartLine := 0
 	for lineNo := 1; scanner.Scan(); lineNo++ {
 		line := scanner.Text()
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		if logicalLine.Len() == 0 {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			logicalStartLine = lineNo
+			logicalLine.WriteString(line)
+		} else {
+			logicalLine.WriteString(line)
+		}
+		current := logicalLine.String()
+		if hasLineContinuation(current) {
+			logicalLine.Reset()
+			logicalLine.WriteString(strings.TrimSuffix(current, "\\"))
 			continue
 		}
+
+		trimmed := strings.TrimSpace(current)
+		logicalLine.Reset()
+		logicalStart := logicalStartLine
+		logicalStartLine = 0
 
 		argv, parseErr := tokenizeBusLine(trimmed)
 		if parseErr != nil {
 			return busfileError{
 				File:     path,
-				Line:     lineNo,
+				Line:     logicalStart,
 				Message:  "syntax error: " + parseErr.Error(),
 				ExitCode: 65,
 			}
@@ -730,14 +1169,14 @@ func collectBusfileCommands(path string, stack map[string]bool, commands *[]busf
 		if len(argv) == 0 {
 			return busfileError{
 				File:     path,
-				Line:     lineNo,
+				Line:     logicalStart,
 				Message:  "syntax error: empty command",
 				ExitCode: 65,
 			}
 		}
 		*commands = append(*commands, busfileCommand{
 			File: path,
-			Line: lineNo,
+			Line: logicalStart,
 			Raw:  trimmed,
 			Argv: argv,
 		})
@@ -745,7 +1184,19 @@ func collectBusfileCommands(path string, stack map[string]bool, commands *[]busf
 	if err := scanner.Err(); err != nil {
 		return busfileError{File: path, Message: err.Error(), ExitCode: 2}
 	}
+	if logicalLine.Len() > 0 {
+		return busfileError{
+			File:     path,
+			Line:     logicalStartLine,
+			Message:  "syntax error: line continuation at end of file",
+			ExitCode: 65,
+		}
+	}
 	return nil
+}
+
+func hasLineContinuation(line string) bool {
+	return strings.HasSuffix(line, "\\")
 }
 
 func tokenizeBusLine(line string) ([]string, error) {
