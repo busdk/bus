@@ -1,6 +1,1 @@
-- [ ] Add `CONTRIBUTING.md` for `bus` or update `README.md` to remove the broken reference.
-- [ ] Wire real in-process module runners into `bus` (library dispatch path), not only external `bus-*` binaries.
-- [ ] Register in-process Tx-capable runners for real modules so `provider=fs` can run outside tests.
-- [ ] Add `.bus/tx/` journal hook points and deterministic incomplete-transaction recovery behavior for batch mode.
-- [ ] Add e2e tests that prove fs-provider success/failure semantics using a real write/fail module target (not only internal tests).
-- [ ] Add performance-focused regression coverage for large datasets in end-to-end busfile runs (heavy test scenarios).
+- [x] Register in-process Tx-capable runners for real modules so `provider=fs` can run outside tests.
