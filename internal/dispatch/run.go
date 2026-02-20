@@ -2,15 +2,20 @@ package dispatch
 
 import (
 	"bufio"
+	"bus/internal/txfs"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"time"
+	"unicode"
 )
 
 const version = "dev"
@@ -82,12 +87,57 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 }
 
 type busfileOptions struct {
-	check       bool
-	trace       bool
-	transaction string
-	scope       string
-	files       []string
+	check          bool
+	trace          bool
+	transaction    string
+	transactionSet bool
+	scope          string
+	scopeSet       bool
+	files          []string
 }
+
+type busfileConfig struct {
+	transactionProvider string
+	transactionScope    string
+	fallbackToNone      bool
+	validationLevel     string
+	shellLookupEnabled  bool
+}
+
+type busfileExecutor interface {
+	Execute(command busfileCommand, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error)
+}
+
+type hybridBusfileExecutor struct {
+	shellLookupEnabled bool
+}
+
+func (e hybridBusfileExecutor) Execute(command busfileCommand, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
+	if len(command.Argv) == 0 {
+		return 65, fmt.Errorf("syntax error: empty command")
+	}
+	target := command.Argv[0]
+	if runner, ok := inProcessModuleRunners[target]; ok {
+		code, err := runner(command.Argv[1:], env, stdin, stdout, stderr)
+		if err != nil {
+			return 1, fmt.Errorf("dispatch error: %v", err)
+		}
+		if code != 0 {
+			return code, fmt.Errorf("command failed (exit %d): %s", code, command.Raw)
+		}
+		return 0, nil
+	}
+	if !e.shellLookupEnabled {
+		return 127, fmt.Errorf("dispatch error: no in-process runner for target %q and shell lookup is disabled", target)
+	}
+	return runBusfileCommand(command, env, stdin, stdout, stderr)
+}
+
+type inProcessModuleRunner func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error)
+type inProcessTxModuleRunner func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error)
+
+var inProcessModuleRunners = map[string]inProcessModuleRunner{}
+var inProcessTxModuleRunners = map[string]inProcessTxModuleRunner{}
 
 type busfileCommand struct {
 	File string
@@ -136,22 +186,26 @@ func parseBusfileMode(args []string) (busfileOptions, bool, error) {
 			sawBusfileFlag = true
 		case strings.HasPrefix(arg, "--transaction="):
 			opts.transaction = strings.TrimPrefix(arg, "--transaction=")
+			opts.transactionSet = true
 			sawBusfileFlag = true
 		case arg == "--transaction":
 			if i+1 >= len(args) {
 				return opts, true, fmt.Errorf("missing value for --transaction")
 			}
 			opts.transaction = args[i+1]
+			opts.transactionSet = true
 			sawBusfileFlag = true
 			i++
 		case strings.HasPrefix(arg, "--scope="):
 			opts.scope = strings.TrimPrefix(arg, "--scope=")
+			opts.scopeSet = true
 			sawBusfileFlag = true
 		case arg == "--scope":
 			if i+1 >= len(args) {
 				return opts, true, fmt.Errorf("missing value for --scope")
 			}
 			opts.scope = args[i+1]
+			opts.scopeSet = true
 			sawBusfileFlag = true
 			i++
 		case strings.HasPrefix(arg, "-"):
@@ -186,8 +240,20 @@ func parseBusfileMode(args []string) (busfileOptions, bool, error) {
 }
 
 func runBusfiles(opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
-	if opts.transaction != "none" {
-		fmt.Fprintf(stderr, "bus: invalid usage: transaction provider %q is not implemented\n", opts.transaction)
+	cfg := loadBusfileConfig()
+	return runBusfilesWithExecutor(opts, env, stdin, stdout, stderr, cfg)
+}
+
+func runBusfilesWithExecutor(opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, cfg busfileConfig) int {
+	if opts.transactionSet {
+		cfg.transactionProvider = opts.transaction
+	}
+	if opts.scopeSet {
+		cfg.transactionScope = opts.scope
+	}
+
+	if !isValidScope(cfg.transactionScope) {
+		fmt.Fprintf(stderr, "bus: invalid usage: transaction scope %q is not supported\n", cfg.transactionScope)
 		return 2
 	}
 
@@ -201,23 +267,72 @@ func runBusfiles(opts busfileOptions, env []string, stdin io.Reader, stdout io.W
 		fmt.Fprintf(stderr, "bus: %v\n", err)
 		return 1
 	}
+	if err := validateBusfileCommands(commands); err != nil {
+		var bfErr busfileError
+		if errors.As(err, &bfErr) {
+			fmt.Fprintln(stderr, bfErr.Error())
+			return bfErr.ExitCode
+		}
+		fmt.Fprintf(stderr, "bus: %v\n", err)
+		return 1
+	}
+	if err := preflightDispatchTargets(commands, env, cfg); err != nil {
+		var bfErr busfileError
+		if errors.As(err, &bfErr) {
+			fmt.Fprintln(stderr, bfErr.Error())
+			return bfErr.ExitCode
+		}
+		fmt.Fprintf(stderr, "bus: %v\n", err)
+		return 1
+	}
+	resolvedProvider, warning, resolveErr := resolveTransactionProvider(cfg, commands, opts.transactionSet)
+	if resolveErr != nil {
+		fmt.Fprintln(stderr, resolveErr.Error())
+		return 2
+	}
+	if warning != "" {
+		fmt.Fprintln(stderr, warning)
+	}
+	cfg.transactionProvider = resolvedProvider
 
 	if opts.check {
 		return 0
 	}
 
-	for _, command := range commands {
-		if opts.trace {
-			fmt.Fprintf(stdout, "%s:%d: bus %s\n", command.File, command.Line, strings.Join(command.Argv, " "))
-		}
-		commandEnv := withBusfileEnv(env, command.File, command.Line)
-		code, runErr := runBusfileCommand(command, commandEnv, stdin, stdout, stderr)
-		if runErr != nil {
-			fmt.Fprintf(stderr, "%s:%d: %v\n", command.File, command.Line, runErr)
-			return code
-		}
+	switch cfg.transactionProvider {
+	case "none":
+		executor := hybridBusfileExecutor{shellLookupEnabled: cfg.shellLookupEnabled}
+		return executeBusfileCommands(commands, opts, env, stdin, stdout, stderr, executor)
+	case "fs":
+		return executeBusfileCommandsFS(commands, opts, env, stdin, stdout, stderr, cfg)
+	default:
+		fmt.Fprintf(stderr, "bus: invalid usage: transaction provider %q is not implemented\n", cfg.transactionProvider)
+		return 2
 	}
-	return 0
+}
+
+func resolveTransactionProvider(cfg busfileConfig, commands []busfileCommand, cliTransactionSet bool) (provider string, warning string, err error) {
+	if !isValidTransaction(cfg.transactionProvider) {
+		return "", "", fmt.Errorf("bus: invalid usage: transaction provider %q is not supported", cfg.transactionProvider)
+	}
+	switch cfg.transactionProvider {
+	case "none":
+		return "none", "", nil
+	case "fs":
+		// fs provider requires in-process module dispatch to intercept writes.
+		if allCommandsTxInProcess(commands) {
+			return "fs", "", nil
+		}
+		if cliTransactionSet || !cfg.fallbackToNone {
+			return "", "", fmt.Errorf("bus: transaction provider \"fs\" requires in-process tx runners for all targets")
+		}
+		return "none", "bus: warning: transaction provider \"fs\" requires in-process tx runners; falling back to \"none\"", nil
+	default:
+		if cliTransactionSet || !cfg.fallbackToNone {
+			return "", "", fmt.Errorf("bus: invalid usage: transaction provider %q is not implemented", cfg.transactionProvider)
+		}
+		return "none", fmt.Sprintf("bus: warning: transaction provider %q unavailable; falling back to \"none\"", cfg.transactionProvider), nil
+	}
 }
 
 func preflightBusfiles(files []string) ([]busfileCommand, error) {
@@ -229,6 +344,342 @@ func preflightBusfiles(files []string) ([]busfileCommand, error) {
 		}
 	}
 	return commands, nil
+}
+
+func validateBusfileCommands(commands []busfileCommand) error {
+	for _, command := range commands {
+		if len(command.Argv) == 0 {
+			return busfileError{
+				File:     command.File,
+				Line:     command.Line,
+				Message:  "validation error: empty command",
+				ExitCode: 1,
+			}
+		}
+		if err := validateCommand(command.Argv); err != nil {
+			return busfileError{
+				File:     command.File,
+				Line:     command.Line,
+				Message:  "validation error: " + err.Error(),
+				ExitCode: 1,
+			}
+		}
+	}
+	return nil
+}
+
+func preflightDispatchTargets(commands []busfileCommand, env []string, cfg busfileConfig) error {
+	for _, command := range commands {
+		if len(command.Argv) == 0 {
+			continue
+		}
+		target := command.Argv[0]
+		if hasInProcessRunner(target) || hasInProcessTxRunner(target) {
+			continue
+		}
+		if !cfg.shellLookupEnabled {
+			return busfileError{
+				File:     command.File,
+				Line:     command.Line,
+				Message:  fmt.Sprintf("dispatch error: shell lookup disabled and no in-process runner for target %q", target),
+				ExitCode: 127,
+			}
+		}
+		executable := "bus-" + target
+		if _, err := lookPathEnv(executable, env); err != nil {
+			return busfileError{
+				File:     command.File,
+				Line:     command.Line,
+				Message:  fmt.Sprintf("dispatch error: unknown target %q", target),
+				ExitCode: 127,
+			}
+		}
+	}
+	return nil
+}
+
+func hasInProcessRunner(target string) bool {
+	_, ok := inProcessModuleRunners[target]
+	return ok
+}
+
+func allCommandsInProcess(commands []busfileCommand) bool {
+	if len(commands) == 0 {
+		return false
+	}
+	for _, command := range commands {
+		if len(command.Argv) == 0 {
+			continue
+		}
+		if !hasInProcessRunner(command.Argv[0]) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasInProcessTxRunner(target string) bool {
+	_, ok := inProcessTxModuleRunners[target]
+	return ok
+}
+
+func allCommandsTxInProcess(commands []busfileCommand) bool {
+	if len(commands) == 0 {
+		return false
+	}
+	for _, command := range commands {
+		if len(command.Argv) == 0 {
+			continue
+		}
+		if !hasInProcessTxRunner(command.Argv[0]) {
+			return false
+		}
+	}
+	return true
+}
+
+func executeBusfileCommands(commands []busfileCommand, opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, executor busfileExecutor) int {
+	for _, command := range commands {
+		if opts.trace {
+			fmt.Fprintf(stdout, "%s:%d: bus %s\n", command.File, command.Line, strings.Join(command.Argv, " "))
+		}
+		commandEnv := withBusfileEnv(env, command.File, command.Line)
+		code, runErr := executor.Execute(command, commandEnv, stdin, stdout, stderr)
+		if runErr != nil {
+			fmt.Fprintf(stderr, "%s:%d: %v\n", command.File, command.Line, runErr)
+			return code
+		}
+	}
+	return 0
+}
+
+func executeBusfileCommandsFS(commands []busfileCommand, opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, cfg busfileConfig) int {
+	workspaceRoot, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "bus: transaction provider \"fs\" failed to resolve workspace: %v\n", err)
+		return 1
+	}
+
+	var units [][]busfileCommand
+	switch cfg.transactionScope {
+	case "batch":
+		units = [][]busfileCommand{commands}
+	case "file":
+		units = partitionCommandsByFile(commands)
+	default:
+		fmt.Fprintf(stderr, "bus: invalid usage: transaction scope %q is not supported\n", cfg.transactionScope)
+		return 2
+	}
+
+	for _, unit := range units {
+		if len(unit) == 0 {
+			continue
+		}
+		code, runErr := executeFSUnit(unit, opts, env, stdin, stdout, stderr, workspaceRoot)
+		if runErr != nil {
+			if bf, ok := runErr.(busfileError); ok {
+				fmt.Fprintln(stderr, bf.Error())
+				return bf.ExitCode
+			}
+			fmt.Fprintln(stderr, runErr.Error())
+			return code
+		}
+	}
+	return 0
+}
+
+func partitionCommandsByFile(commands []busfileCommand) [][]busfileCommand {
+	orderedFiles := make([]string, 0)
+	grouped := map[string][]busfileCommand{}
+	for _, command := range commands {
+		if _, ok := grouped[command.File]; !ok {
+			orderedFiles = append(orderedFiles, command.File)
+		}
+		grouped[command.File] = append(grouped[command.File], command)
+	}
+	units := make([][]busfileCommand, 0, len(orderedFiles))
+	for _, file := range orderedFiles {
+		units = append(units, grouped[file])
+	}
+	return units
+}
+
+func executeFSUnit(commands []busfileCommand, opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, workspaceRoot string) (int, error) {
+	txID := fmt.Sprintf("%d-%d", time.Now().UnixNano(), os.Getpid())
+	txRoot := filepath.Join(workspaceRoot, ".bus", "tx", txID)
+	overlayRoot := filepath.Join(txRoot, "overlay")
+
+	if err := os.MkdirAll(filepath.Dir(overlayRoot), 0o755); err != nil {
+		return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to initialize: %v", err)
+	}
+	fsOverlay, err := txfs.New(workspaceRoot, overlayRoot)
+	if err != nil {
+		return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to initialize: %v", err)
+	}
+
+	for _, command := range commands {
+		if opts.trace {
+			fmt.Fprintf(stdout, "%s:%d: bus %s\n", command.File, command.Line, strings.Join(command.Argv, " "))
+		}
+		commandEnv := withBusfileEnv(env, command.File, command.Line)
+		commandEnv = upsertEnv(commandEnv, "BUS_TRANSACTION_PROVIDER", "fs")
+		code, runErr := runBusfileCommandFS(command, commandEnv, stdin, stdout, stderr, fsOverlay)
+		if runErr != nil {
+			_ = fsOverlay.Rollback()
+			_ = os.RemoveAll(txRoot)
+			return code, busfileError{
+				File:     command.File,
+				Line:     command.Line,
+				Message:  runErr.Error(),
+				ExitCode: code,
+			}
+		}
+	}
+
+	if err := fsOverlay.Commit(); err != nil {
+		_ = fsOverlay.Rollback()
+		_ = os.RemoveAll(txRoot)
+		return 1, fmt.Errorf("bus: transaction provider \"fs\" commit failed: %v", err)
+	}
+	if err := os.RemoveAll(txRoot); err != nil {
+		return 1, fmt.Errorf("bus: transaction provider \"fs\" cleanup failed: %v", err)
+	}
+	return 0, nil
+}
+
+func runBusfileCommandFS(command busfileCommand, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fsOverlay *txfs.FS) (int, error) {
+	if len(command.Argv) == 0 {
+		return 65, fmt.Errorf("syntax error: empty command")
+	}
+	target := command.Argv[0]
+	runner, ok := inProcessTxModuleRunners[target]
+	if !ok {
+		return 2, fmt.Errorf("dispatch error: transaction provider \"fs\" requires in-process tx runner for target %q", target)
+	}
+	code, err := runner(command.Argv[1:], env, stdin, stdout, stderr, fsOverlay)
+	if err != nil {
+		return 1, fmt.Errorf("dispatch error: %v", err)
+	}
+	if code != 0 {
+		return code, fmt.Errorf("command failed (exit %d): %s", code, command.Raw)
+	}
+	return 0, nil
+}
+
+func validateCommand(argv []string) error {
+	if len(argv) < 2 {
+		return nil
+	}
+	if argv[0] == "journal" && argv[1] == "add" {
+		return validateJournalAdd(argv[2:])
+	}
+	if len(argv) >= 3 && argv[0] == "bank" && argv[1] == "add" && argv[2] == "transactions" {
+		return validateBankAddTransactions(argv[3:])
+	}
+	return nil
+}
+
+func validateJournalAdd(args []string) error {
+	debitTotal := new(big.Rat)
+	creditTotal := new(big.Rat)
+	hasDebit := false
+	hasCredit := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--date" {
+			if i+1 >= len(args) {
+				return fmt.Errorf("journal add missing value for --date")
+			}
+			if !isISODate(args[i+1]) {
+				return fmt.Errorf("journal add invalid date %q", args[i+1])
+			}
+			i++
+			continue
+		}
+		if arg == "--debit" || arg == "--credit" {
+			if i+1 >= len(args) {
+				return fmt.Errorf("journal add missing value for %s", arg)
+			}
+			posting := args[i+1]
+			account, amountText, ok := strings.Cut(posting, "=")
+			if !ok || strings.TrimSpace(account) == "" || strings.TrimSpace(amountText) == "" {
+				return fmt.Errorf("journal add invalid posting %q", posting)
+			}
+			amount, ok := new(big.Rat).SetString(amountText)
+			if !ok {
+				return fmt.Errorf("journal add invalid amount %q", amountText)
+			}
+			if amount.Sign() <= 0 {
+				return fmt.Errorf("journal add amount must be positive: %q", amountText)
+			}
+			if arg == "--debit" {
+				hasDebit = true
+				debitTotal.Add(debitTotal, amount)
+			} else {
+				hasCredit = true
+				creditTotal.Add(creditTotal, amount)
+			}
+			i++
+		}
+	}
+	if !hasDebit || !hasCredit {
+		return fmt.Errorf("journal add requires both debit and credit postings")
+	}
+	if debitTotal.Cmp(creditTotal) != 0 {
+		return fmt.Errorf("journal add unbalanced entry: debit=%s credit=%s", debitTotal.FloatString(10), creditTotal.FloatString(10))
+	}
+	return nil
+}
+
+func validateBankAddTransactions(args []string) error {
+	for i := 0; i < len(args); i++ {
+		if args[i] != "--set" {
+			continue
+		}
+		if i+1 >= len(args) {
+			return fmt.Errorf("bank add transactions missing value for --set")
+		}
+		key, value, ok := strings.Cut(args[i+1], "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			return fmt.Errorf("bank add transactions invalid --set %q", args[i+1])
+		}
+		switch key {
+		case "booked_date", "value_date":
+			if value != "" && !isISODate(value) {
+				return fmt.Errorf("bank add transactions invalid %s %q", key, value)
+			}
+		case "amount":
+			if _, ok := new(big.Rat).SetString(value); !ok {
+				return fmt.Errorf("bank add transactions invalid amount %q", value)
+			}
+		case "currency":
+			if !isCurrencyCode(value) {
+				return fmt.Errorf("bank add transactions invalid currency %q", value)
+			}
+		}
+		i++
+	}
+	return nil
+}
+
+func isISODate(value string) bool {
+	if value == "" {
+		return false
+	}
+	_, err := time.Parse("2006-01-02", value)
+	return err == nil
+}
+
+func isCurrencyCode(value string) bool {
+	if len(value) != 3 {
+		return false
+	}
+	for _, r := range value {
+		if !unicode.IsUpper(r) || !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func collectBusfileCommands(path string, stack map[string]bool, commands *[]busfileCommand) error {
@@ -456,11 +907,193 @@ func readFirstLine(path string) (string, error) {
 
 func isValidTransaction(value string) bool {
 	switch value {
-	case "none", "git", "snapshot", "copy":
+	case "none", "fs", "git", "snapshot", "copy":
 		return true
 	default:
 		return false
 	}
+}
+
+func loadBusfileConfig() busfileConfig {
+	cfg := busfileConfig{
+		transactionProvider: "none",
+		transactionScope:    "file",
+		fallbackToNone:      true,
+		validationLevel:     "syntax",
+		shellLookupEnabled:  true,
+	}
+	applyDatapackageConfig(&cfg)
+	applyPreferencesConfig(&cfg)
+	return cfg
+}
+
+func applyDatapackageConfig(cfg *busfileConfig) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	path := filepath.Join(wd, "datapackage.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return
+	}
+	busMap, ok := mapValue(doc["bus"])
+	if !ok {
+		return
+	}
+	busfileMap, ok := mapValue(busMap["busfile"])
+	if !ok {
+		return
+	}
+	if txMap, ok := mapValue(busfileMap["transaction"]); ok {
+		if provider, ok := stringValue(txMap["provider"]); ok && provider != "" {
+			cfg.transactionProvider = provider
+		}
+		if scope, ok := stringValue(txMap["scope"]); ok && scope != "" {
+			cfg.transactionScope = scope
+		}
+		if fallback, ok := boolValue(txMap["fallback_to_none"]); ok {
+			cfg.fallbackToNone = fallback
+		}
+	}
+	if dispatchMap, ok := mapValue(busfileMap["dispatch"]); ok {
+		if enabled, ok := boolValue(dispatchMap["shell_lookup_enabled"]); ok {
+			cfg.shellLookupEnabled = enabled
+		}
+	}
+	if validationMap, ok := mapValue(busfileMap["validation"]); ok {
+		if level, ok := stringValue(validationMap["level"]); ok && level != "" {
+			cfg.validationLevel = level
+		}
+	}
+}
+
+func applyPreferencesConfig(cfg *busfileConfig) {
+	path := preferencesPath()
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var env struct {
+		Values map[string]json.RawMessage `json:"values"`
+	}
+	if err := json.Unmarshal(data, &env); err != nil {
+		return
+	}
+	if len(env.Values) == 0 {
+		return
+	}
+	applyPreferencesObject(env.Values["bus.busfile"], cfg)
+	readPrefString(env.Values, "bus.busfile.transaction.provider", &cfg.transactionProvider)
+	readPrefString(env.Values, "bus.busfile.transaction.scope", &cfg.transactionScope)
+	readPrefBool(env.Values, "bus.busfile.transaction.fallback_to_none", &cfg.fallbackToNone)
+	readPrefString(env.Values, "bus.busfile.validation.level", &cfg.validationLevel)
+	readPrefBool(env.Values, "bus.busfile.dispatch.shell_lookup_enabled", &cfg.shellLookupEnabled)
+}
+
+func applyPreferencesObject(raw json.RawMessage, cfg *busfileConfig) {
+	if len(raw) == 0 {
+		return
+	}
+	var busfileMap map[string]any
+	if err := json.Unmarshal(raw, &busfileMap); err != nil {
+		return
+	}
+	if txMap, ok := mapValue(busfileMap["transaction"]); ok {
+		if provider, ok := stringValue(txMap["provider"]); ok && provider != "" {
+			cfg.transactionProvider = provider
+		}
+		if scope, ok := stringValue(txMap["scope"]); ok && scope != "" {
+			cfg.transactionScope = scope
+		}
+		if fallback, ok := boolValue(txMap["fallback_to_none"]); ok {
+			cfg.fallbackToNone = fallback
+		}
+	}
+	if dispatchMap, ok := mapValue(busfileMap["dispatch"]); ok {
+		if enabled, ok := boolValue(dispatchMap["shell_lookup_enabled"]); ok {
+			cfg.shellLookupEnabled = enabled
+		}
+	}
+	if validationMap, ok := mapValue(busfileMap["validation"]); ok {
+		if level, ok := stringValue(validationMap["level"]); ok && level != "" {
+			cfg.validationLevel = level
+		}
+	}
+}
+
+func readPrefString(values map[string]json.RawMessage, key string, dest *string) {
+	raw, ok := values[key]
+	if !ok || len(raw) == 0 {
+		return
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return
+	}
+	if value != "" {
+		*dest = value
+	}
+}
+
+func readPrefBool(values map[string]json.RawMessage, key string, dest *bool) {
+	raw, ok := values[key]
+	if !ok || len(raw) == 0 {
+		return
+	}
+	var value bool
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return
+	}
+	*dest = value
+}
+
+func preferencesPath() string {
+	if p := os.Getenv("BUS_PREFERENCES_PATH"); p != "" {
+		return p
+	}
+	if runtime.GOOS == "windows" {
+		dir := os.Getenv("APPDATA")
+		if dir == "" {
+			dir = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming")
+		}
+		if dir == "" {
+			return ""
+		}
+		return filepath.Join(dir, "BusDK", "preferences.json")
+	}
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
+		home := os.Getenv("HOME")
+		if home == "" {
+			return ""
+		}
+		dir = filepath.Join(home, ".config")
+	}
+	return filepath.Join(dir, "busdk", "preferences.json")
+}
+
+func mapValue(v any) (map[string]any, bool) {
+	m, ok := v.(map[string]any)
+	return m, ok
+}
+
+func stringValue(v any) (string, bool) {
+	s, ok := v.(string)
+	return s, ok
+}
+
+func boolValue(v any) (bool, bool) {
+	b, ok := v.(bool)
+	return b, ok
 }
 
 func isValidScope(value string) bool {

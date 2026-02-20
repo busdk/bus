@@ -181,14 +181,80 @@ test "$preflight_code" -eq 65
 ! test -s "$WORK_DIR/preflight.out"
 grep -q '^.*/bad.bus:1: syntax error:' "$WORK_DIR/preflight.err"
 
+cat > "$WORK_DIR/unknown_target.bus" <<'EOF_UNKNOWN_TARGET'
+bnak add --id 1
+EOF_UNKNOWN_TARGET
+
+set +e
+PATH="$TEST_PATH" "$BIN_PATH" "$WORK_DIR/2024-01.bus" "$WORK_DIR/unknown_target.bus" > "$WORK_DIR/unknown_target.out" 2> "$WORK_DIR/unknown_target.err"
+unknown_target_code=$?
+set -e
+test "$unknown_target_code" -eq 127
+! test -s "$WORK_DIR/unknown_target.out"
+grep -q 'dispatch error: unknown target "bnak"' "$WORK_DIR/unknown_target.err"
+
 PATH="$TEST_PATH" "$BIN_PATH" --check "$WORK_DIR/2024-01.bus" > "$WORK_DIR/check.out" 2> "$WORK_DIR/check.err"
 ! test -s "$WORK_DIR/check.out"
 ! test -s "$WORK_DIR/check.err"
+
+cat > "$WORK_DIR/check_unbalanced.bus" <<'EOF_CHECK_UNBAL'
+journal add --date 2024-02-29 --debit 1910=10.00 --credit 3000=9.99
+EOF_CHECK_UNBAL
+set +e
+PATH="$TEST_PATH" "$BIN_PATH" --check "$WORK_DIR/check_unbalanced.bus" > "$WORK_DIR/check_unbalanced.out" 2> "$WORK_DIR/check_unbalanced.err"
+check_unbalanced_code=$?
+set -e
+test "$check_unbalanced_code" -eq 1
+! test -s "$WORK_DIR/check_unbalanced.out"
+grep -q 'validation error: journal add unbalanced entry' "$WORK_DIR/check_unbalanced.err"
+
+cat > "$WORK_DIR/check_bank_invalid.bus" <<'EOF_CHECK_BANK_INVALID'
+bank add transactions --set booked_date=2024-99-99 --set amount=NaN --set currency=EURO
+EOF_CHECK_BANK_INVALID
+set +e
+PATH="$TEST_PATH" "$BIN_PATH" --check "$WORK_DIR/check_bank_invalid.bus" > "$WORK_DIR/check_bank_invalid.out" 2> "$WORK_DIR/check_bank_invalid.err"
+check_bank_invalid_code=$?
+set -e
+test "$check_bank_invalid_code" -eq 1
+! test -s "$WORK_DIR/check_bank_invalid.out"
+grep -q 'validation error: bank add transactions invalid booked_date' "$WORK_DIR/check_bank_invalid.err"
 
 PATH="$TEST_PATH" "$BIN_PATH" --trace "$WORK_DIR/2024-01.bus" > "$WORK_DIR/trace.out" 2> "$WORK_DIR/trace.err"
 grep -q '2024-01.bus:1: bus accounts jan' "$WORK_DIR/trace.out"
 grep -q 'ACCOUNTS:jan' "$WORK_DIR/trace.out"
 ! test -s "$WORK_DIR/trace.err"
+
+cat > "$WORK_DIR/tx-config.bus" <<'EOF_TX_CONFIG'
+accounts list
+EOF_TX_CONFIG
+cat > "$WORK_DIR/datapackage.json" <<'EOF_DP_FALLBACK'
+{"bus":{"busfile":{"transaction":{"provider":"fs","scope":"file","fallback_to_none":true}}}}
+EOF_DP_FALLBACK
+(cd "$WORK_DIR" && PATH="$TEST_PATH" "$BIN_PATH" tx-config.bus > "$WORK_DIR/tx_fallback.out" 2> "$WORK_DIR/tx_fallback.err")
+grep -q 'ACCOUNTS:list' "$WORK_DIR/tx_fallback.out"
+grep -q 'falling back to "none"' "$WORK_DIR/tx_fallback.err"
+
+cat > "$WORK_DIR/datapackage.json" <<'EOF_DP_STRICT'
+{"bus":{"busfile":{"transaction":{"provider":"fs","scope":"file","fallback_to_none":false}}}}
+EOF_DP_STRICT
+set +e
+(cd "$WORK_DIR" && PATH="$TEST_PATH" "$BIN_PATH" tx-config.bus > "$WORK_DIR/tx_strict.out" 2> "$WORK_DIR/tx_strict.err")
+tx_strict_code=$?
+set -e
+test "$tx_strict_code" -eq 2
+! test -s "$WORK_DIR/tx_strict.out"
+grep -q 'provider "fs" requires in-process tx runners' "$WORK_DIR/tx_strict.err"
+
+cat > "$WORK_DIR/datapackage.json" <<'EOF_DP_SHELL_OFF'
+{"bus":{"busfile":{"dispatch":{"shell_lookup_enabled":false}}}}
+EOF_DP_SHELL_OFF
+set +e
+(cd "$WORK_DIR" && PATH="$TEST_PATH" "$BIN_PATH" tx-config.bus > "$WORK_DIR/shell_off.out" 2> "$WORK_DIR/shell_off.err")
+shell_off_code=$?
+set -e
+test "$shell_off_code" -eq 127
+! test -s "$WORK_DIR/shell_off.out"
+grep -q 'shell lookup disabled and no in-process runner' "$WORK_DIR/shell_off.err"
 
 set +e
 PATH="$TEST_PATH" "$BIN_PATH" fail sample > "$WORK_DIR/fail.out" 2> "$WORK_DIR/fail.err"

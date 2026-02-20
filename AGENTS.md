@@ -27,6 +27,8 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 
 - **Pattern:** `bus <command> [args...]`. This module is the dispatcher; it does not implement domain subcommands.
 - **Dispatch:** Resolve the executable with `exec.LookPath("bus-" + name)` only, then exec with args unchanged, inheriting stdin, stdout, stderr, and environment.
+- **Busfile dispatch selection:** in `.bus` execution mode, prefer in-process module runners when available; otherwise use `bus-<target>` shell lookup only when `bus.busfile.dispatch.shell_lookup_enabled=true`.
+- **FS transactions:** `provider=fs` is valid only when all busfile targets have in-process transaction-capable runners (Tx runners); otherwise fallback/error rules apply.
 - **No arguments:** Print a short usage line to stderr, exit 2, and include an available-commands list if any are discovered.
 - **Missing subcommand (not found in PATH):** stderr must start with `bus:` and mention the expected `bus-<name>` in PATH, then print usage and available commands; exit 127.
 - **Subcommand exit codes:** Pass through exactly. Unexpected exec failures return 1 with a short `bus:` error on stderr.

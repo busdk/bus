@@ -1,3 +1,6 @@
-- [ ] When first argument is `help` and `bus-help` is not on PATH, show usage and available commands then exit 2 (per docs.busdk.com/cli/command-structure).
-- [ ] Add end-to-end bash test(s) for bus no-args, missing subcommand, and successful dispatch per SDD testing strategy.
-- [ ] Add CONTRIBUTING.md so the README reference is valid, or update README to remove the reference.
+- [ ] Add `CONTRIBUTING.md` for `bus` or update `README.md` to remove the broken reference.
+- [ ] Wire real in-process module runners into `bus` (library dispatch path), not only external `bus-*` binaries.
+- [ ] Register in-process Tx-capable runners for real modules so `provider=fs` can run outside tests.
+- [ ] Add `.bus/tx/` journal hook points and deterministic incomplete-transaction recovery behavior for batch mode.
+- [ ] Add e2e tests that prove fs-provider success/failure semantics using a real write/fail module target (not only internal tests).
+- [ ] Add performance-focused regression coverage for large datasets in end-to-end busfile runs (heavy test scenarios).
