@@ -116,6 +116,85 @@ func TestRunHelpDispatchesWhenBinaryExists(t *testing.T) {
 	}
 }
 
+func TestRunGlobalHelpShortCircuits(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "HELP")
+	env := setEnv(os.Environ(), "PATH", tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "-q", "--verbose", "--help"}, env, nil, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "usage: bus [global-flags] <command> [args...]") {
+		t.Fatalf("expected global help usage, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "available commands:") {
+		t.Fatalf("expected available commands in help, got %q", stdout.String())
+	}
+}
+
+func TestRunGlobalVersionShortCircuits(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "--color", "rainbow", "--version"}, os.Environ(), nil, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no stderr, got %q", stderr.String())
+	}
+	if stdout.String() != "bus dev\n" {
+		t.Fatalf("expected version output %q, got %q", "bus dev\n", stdout.String())
+	}
+}
+
+func TestRunParsesGlobalFlagsBeforeSubcommand(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "status", "PRIMARY")
+	env := setEnv(os.Environ(), "PATH", tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "-q", "-C", "/", "--color=never", "status", "--version"}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "PRIMARY:-q -C / --color=never --version\n" {
+		t.Fatalf("unexpected delegated args: %q", stdout.String())
+	}
+}
+
+func TestRunDoubleDashTerminatesGlobalParsing(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "status", "PRIMARY")
+	env := setEnv(os.Environ(), "PATH", tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "--", "status", "--version"}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "PRIMARY:--version\n" {
+		t.Fatalf("unexpected delegated args with -- terminator: %q", stdout.String())
+	}
+}
+
 func TestRunDispatchesAndPassesArgs(t *testing.T) {
 	t.Parallel()
 
@@ -490,4 +569,146 @@ func lookupEnv(env []string, key string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func TestRunBusfileExecutesCommands(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+	buildFakeSubcommand(t, tempDir, "journal", "JOURNAL")
+
+	busfile := filepath.Join(tempDir, "2024-02.bus")
+	content := strings.Join([]string{
+		"# month file",
+		"accounts add --code 3000",
+		"journal add --date 2024-02-29 --desc 'M2'",
+		"",
+	}, "\n")
+	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
+		t.Fatalf("write busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", busfile}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "ACCOUNTS:add --code 3000\n") {
+		t.Fatalf("expected accounts invocation, got %q", got)
+	}
+	if !strings.Contains(got, "JOURNAL:add --date 2024-02-29 --desc M2\n") {
+		t.Fatalf("expected journal invocation, got %q", got)
+	}
+}
+
+func TestRunBusfilePreflightStopsBeforeExecution(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+
+	good := filepath.Join(tempDir, "2024-01.bus")
+	bad := filepath.Join(tempDir, "2024-02.bus")
+	if err := os.WriteFile(good, []byte("accounts list\n"), 0o600); err != nil {
+		t.Fatalf("write good busfile: %v", err)
+	}
+	if err := os.WriteFile(bad, []byte("accounts add --desc 'unterminated\n"), 0o600); err != nil {
+		t.Fatalf("write bad busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", good, bad}, env, nil, &stdout, &stderr)
+	if code != 65 {
+		t.Fatalf("expected exit 65, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected no command execution output, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "syntax error: unterminated quote") {
+		t.Fatalf("expected syntax error, got %q", stderr.String())
+	}
+}
+
+func TestRunBusfileIncludes(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+
+	jan := filepath.Join(tempDir, "2024-01.bus")
+	feb := filepath.Join(tempDir, "2024-02.bus")
+	root := filepath.Join(tempDir, "all.bus")
+	if err := os.WriteFile(jan, []byte("accounts add --code 1000\n"), 0o600); err != nil {
+		t.Fatalf("write jan busfile: %v", err)
+	}
+	if err := os.WriteFile(feb, []byte("accounts add --code 2000\n"), 0o600); err != nil {
+		t.Fatalf("write feb busfile: %v", err)
+	}
+	if err := os.WriteFile(root, []byte("2024-01.bus\n2024-02.bus\n"), 0o600); err != nil {
+		t.Fatalf("write root busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", root}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "ACCOUNTS:add --code 1000\n") || !strings.Contains(got, "ACCOUNTS:add --code 2000\n") {
+		t.Fatalf("expected included files to execute, got %q", got)
+	}
+}
+
+func TestRunBusfileCheckDoesNotExecute(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+
+	file := filepath.Join(tempDir, "check.bus")
+	if err := os.WriteFile(file, []byte("accounts add --code 3000\n"), 0o600); err != nil {
+		t.Fatalf("write busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "--check", file}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected no execution output in --check mode, got %q", stdout.String())
+	}
+}
+
+func TestRunBusfileTrace(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+
+	file := filepath.Join(tempDir, "trace.bus")
+	if err := os.WriteFile(file, []byte("accounts add --code 3000\n"), 0o600); err != nil {
+		t.Fatalf("write busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "--trace", file}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "trace.bus:1: bus accounts add --code 3000\n") {
+		t.Fatalf("expected trace line, got %q", stdout.String())
+	}
 }
