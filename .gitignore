@@ -31,6 +31,8 @@ go.work.sum
 .idea/
 .vscode/
 bin/
+.make/
+tests/e2e_bus_bus_workspace/
 
 # macOS
 .DS_Store

@@ -334,4 +334,4 @@ test "$fail_code" -eq 7
 diff -u <(printf 'FAIL:sample\n') "$WORK_DIR/fail.out"
 ! test -s "$WORK_DIR/fail.err"
 
-echo "e2e_bus_bus.sh: PASS"
+echo "e2e.sh: PASS"
