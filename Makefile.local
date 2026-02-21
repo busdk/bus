@@ -1,0 +1,2 @@
+# Auto-derived from local module replace directives in go.mod.
+MODULE_BIN_DEPS := bus-accounts bus-bank bus-bfl bus-data bus-journal bus-period
