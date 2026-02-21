@@ -17,9 +17,6 @@ import (
 	"strings"
 	"time"
 	"unicode"
-
-	bankentry "github.com/busdk/bus-bank/pkg/entry"
-	journalentry "github.com/busdk/bus-journal/pkg/entry"
 )
 
 const version = "dev"
@@ -142,18 +139,10 @@ type inProcessTxModuleRunner func(args []string, env []string, stdin io.Reader, 
 
 var inProcessModuleRunners = map[string]inProcessModuleRunner{
 	"bank": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
-		workdir, err := os.Getwd()
-		if err != nil {
-			return 1, err
-		}
-		return bankentry.Run(args, workdir, stdout, stderr), nil
+		return runExternalBusModule("bank", args, env, stdin, stdout, stderr)
 	},
 	"journal": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
-		workdir, err := os.Getwd()
-		if err != nil {
-			return 1, err
-		}
-		return journalentry.Run(args, workdir, stdin, stdout, stderr, false), nil
+		return runExternalBusModule("journal", args, env, stdin, stdout, stderr)
 	},
 }
 var inProcessTxModuleRunners = map[string]inProcessTxModuleRunner{
@@ -163,6 +152,29 @@ var inProcessTxModuleRunners = map[string]inProcessTxModuleRunner{
 	"journal": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error) {
 		return runModuleViaTempWorkspaceAndMerge(args, env, stdin, stdout, stderr, fs, inProcessModuleRunners["journal"])
 	},
+}
+
+func runExternalBusModule(target string, args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
+	executable := "bus-" + target
+	path, err := lookPathEnv(executable, env)
+	if err != nil {
+		return 127, fmt.Errorf("dispatch error: unknown target %q", target)
+	}
+
+	cmd := exec.Command(path, args...)
+	cmd.Env = env
+	cmd.Stdin = stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return exitErr.ExitCode(), nil
+		}
+		return 1, err
+	}
+	return 0, nil
 }
 
 type fsTxJournal struct {
