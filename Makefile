@@ -1,9 +1,10 @@
 GO ?= go
-GOFLAGS ?=
+GOFLAGS ?= -mod=readonly
 BUILD_TRIMPATH ?= 1
+BUILD_VCS ?= 0
 BUILD_LDFLAGS ?= -s -w
 BUILD_STATIC ?= 1
-BUILD_TAGS ?=
+BUILD_TAGS ?= netgo,osusergo
 TEST_TAGS ?= $(BUILD_TAGS)
 TEST_VERBOSE ?= 1
 DEBUG_GCFLAGS ?= all=-N -l -m
@@ -54,6 +55,11 @@ ifneq ($(BUILD_TRIMPATH),0)
 BUILD_TRIMPATH_ARG := -trimpath
 else
 BUILD_TRIMPATH_ARG :=
+endif
+ifneq ($(BUILD_VCS),0)
+BUILD_VCS_ARG := -buildvcs=true
+else
+BUILD_VCS_ARG := -buildvcs=false
 endif
 ifneq ($(BUILD_STATIC),0)
 BUILD_STATIC_LDFLAGS := -extldflags "-static"
@@ -109,7 +115,7 @@ $(WASM_STAMP): $(GO_FILES) $(GO_DEPS)
 	mkdir -p "$(dir $(WASM_OUT))"
 	mkdir -p "$(dir $(WASM_RUNTIME_DST))"
 	cp "$(WASM_EXEC_JS)" "$(WASM_RUNTIME_DST)"
-	CGO_ENABLED=$(CGO_ENABLED) GOOS=js GOARCH=wasm $(GO) build $(GOFLAGS) $(BUILD_TRIMPATH_ARG) $(BUILD_LDFLAGS_ARG) $(BUILD_TAGS_ARG) -o "$(WASM_OUT)" "$(WASM_BUILD_PKG)"
+	CGO_ENABLED=$(CGO_ENABLED) GOOS=js GOARCH=wasm $(GO) build $(GOFLAGS) $(BUILD_TRIMPATH_ARG) $(BUILD_VCS_ARG) $(BUILD_LDFLAGS_ARG) $(BUILD_TAGS_ARG) -o "$(WASM_OUT)" "$(WASM_BUILD_PKG)"
 	touch $(WASM_STAMP)
 else
 WASM_STAMP :=
@@ -119,11 +125,11 @@ build: ./bin/$(BINARY) $(WASM_STAMP)
 
 ./bin/$(BINARY): $(GO_FILES) $(GO_DEPS) $(MODULE_BIN_EXISTING_DEP_PATHS) $(WASM_STAMP)
 	mkdir -p ./bin
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(BUILD_TRIMPATH_ARG) $(BUILD_LDFLAGS_ARG) $(BUILD_TAGS_ARG) -o ./bin/$(BINARY) $(CMD_PKG)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(BUILD_TRIMPATH_ARG) $(BUILD_VCS_ARG) $(BUILD_LDFLAGS_ARG) $(BUILD_TAGS_ARG) -o ./bin/$(BINARY) $(CMD_PKG)
 
 build-debug: $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
 	mkdir -p ./bin
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(BUILD_TAGS_ARG) -gcflags '$(DEBUG_GCFLAGS)' -o ./bin/$(BINARY) $(CMD_PKG)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(BUILD_VCS_ARG) $(BUILD_TAGS_ARG) -gcflags '$(DEBUG_GCFLAGS)' -o ./bin/$(BINARY) $(CMD_PKG)
 
 fmt: $(FMT_STAMP)
 
