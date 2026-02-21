@@ -1,4 +1,13 @@
 GO ?= go
+GOFLAGS ?=
+BUILD_TRIMPATH ?= 1
+BUILD_LDFLAGS ?= -s -w
+BUILD_STATIC ?= 1
+BUILD_TAGS ?=
+TEST_TAGS ?= $(BUILD_TAGS)
+TEST_VERBOSE ?= 1
+DEBUG_GCFLAGS ?= all=-N -l -m
+GRC ?= grc
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 DESTDIR ?=
@@ -37,6 +46,38 @@ TEST_PKGS ?= ./...
 FUZZ_PKGS ?= $(shell CGO_ENABLED=$(CGO_ENABLED) $(GO) list ./...)
 endif
 
+ifneq ($(BUILD_TRIMPATH),0)
+BUILD_TRIMPATH_ARG := -trimpath
+else
+BUILD_TRIMPATH_ARG :=
+endif
+ifneq ($(BUILD_STATIC),0)
+BUILD_STATIC_LDFLAGS := -extldflags "-static"
+else
+BUILD_STATIC_LDFLAGS :=
+endif
+BUILD_LDFLAGS_COMBINED := $(strip $(BUILD_LDFLAGS) $(BUILD_STATIC_LDFLAGS))
+ifneq ($(strip $(BUILD_LDFLAGS_COMBINED)),)
+BUILD_LDFLAGS_ARG := -ldflags '$(BUILD_LDFLAGS_COMBINED)'
+else
+BUILD_LDFLAGS_ARG :=
+endif
+ifneq ($(strip $(BUILD_TAGS)),)
+BUILD_TAGS_ARG := -tags '$(BUILD_TAGS)'
+else
+BUILD_TAGS_ARG :=
+endif
+ifneq ($(strip $(TEST_TAGS)),)
+TEST_TAGS_ARG := -tags '$(TEST_TAGS)'
+else
+TEST_TAGS_ARG :=
+endif
+ifneq ($(TEST_VERBOSE),0)
+TEST_VERBOSE_ARG := -v
+else
+TEST_VERBOSE_ARG :=
+endif
+
 WASM_STAMP := $(STAMP_DIR)/wasm.stamp
 FMT_STAMP := $(STAMP_DIR)/fmt.stamp
 LINT_STAMP := $(STAMP_DIR)/lint.stamp
@@ -45,9 +86,12 @@ FUZZ_STAMP := $(STAMP_DIR)/fuzz.stamp
 BENCH_STAMP := $(STAMP_DIR)/bench.stamp
 E2E_STAMP := $(STAMP_DIR)/e2e.stamp
 
-.PHONY: all build build-wasm test test-fuzz test-bench bench test-docker test-e2e e2e fmt lint check benchmeta install uninstall clean
+.PHONY: all tidy build build-debug build-wasm test color-test test-fuzz test-bench color-bench bench test-docker test-e2e e2e fmt lint check benchmeta install uninstall clean
 
 all: build
+
+tidy:
+	$(GO) mod tidy
 
 build-wasm: $(WASM_STAMP)
 
@@ -61,7 +105,7 @@ $(WASM_STAMP): $(GO_FILES) $(GO_DEPS)
 	mkdir -p "$(dir $(WASM_OUT))"
 	mkdir -p "$(dir $(WASM_RUNTIME_DST))"
 	cp "$(WASM_EXEC_JS)" "$(WASM_RUNTIME_DST)"
-	CGO_ENABLED=$(CGO_ENABLED) GOOS=js GOARCH=wasm $(GO) build -o "$(WASM_OUT)" "$(WASM_BUILD_PKG)"
+	CGO_ENABLED=$(CGO_ENABLED) GOOS=js GOARCH=wasm $(GO) build $(GOFLAGS) $(BUILD_TRIMPATH_ARG) $(BUILD_LDFLAGS_ARG) $(BUILD_TAGS_ARG) -o "$(WASM_OUT)" "$(WASM_BUILD_PKG)"
 	touch $(WASM_STAMP)
 else
 WASM_STAMP :=
@@ -71,7 +115,11 @@ build: ./bin/$(BINARY) $(WASM_STAMP)
 
 ./bin/$(BINARY): $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
 	mkdir -p ./bin
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -o ./bin/$(BINARY) $(CMD_PKG)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(BUILD_TRIMPATH_ARG) $(BUILD_LDFLAGS_ARG) $(BUILD_TAGS_ARG) -o ./bin/$(BINARY) $(CMD_PKG)
+
+build-debug: $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
+	mkdir -p ./bin
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(BUILD_TAGS_ARG) -gcflags '$(DEBUG_GCFLAGS)' -o ./bin/$(BINARY) $(CMD_PKG)
 
 fmt: $(FMT_STAMP)
 
@@ -91,8 +139,11 @@ test: $(TEST_STAMP)
 
 $(TEST_STAMP): $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
 	mkdir -p $(STAMP_DIR)
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(TEST_PKGS)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(TEST_TAGS_ARG) $(TEST_VERBOSE_ARG) $(TEST_PKGS)
 	touch $(TEST_STAMP)
+
+color-test:
+	CGO_ENABLED=$(CGO_ENABLED) $(GRC) $(GO) test $(TEST_TAGS_ARG) $(TEST_VERBOSE_ARG) $(TEST_PKGS)
 
 test-fuzz: $(FUZZ_STAMP)
 
@@ -100,10 +151,10 @@ $(FUZZ_STAMP): $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
 	mkdir -p $(STAMP_DIR)
 	@set -eu; \
 	for pkg in $(FUZZ_PKGS); do \
-		fuzzes=$$(CGO_ENABLED=$(CGO_ENABLED) $(GO) test "$$pkg" -list Fuzz | awk '/^Fuzz/ {print}'); \
+		fuzzes=$$(CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(TEST_TAGS_ARG) "$$pkg" -list Fuzz | awk '/^Fuzz/ {print}'); \
 		if [ -n "$$fuzzes" ]; then \
 			for fuzz in $$fuzzes; do \
-				CGO_ENABLED=$(CGO_ENABLED) $(GO) test "$$pkg" -run="^$$fuzz$$" -fuzz="^$$fuzz$$" -fuzztime=$(FUZZTIME); \
+				CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(TEST_TAGS_ARG) "$$pkg" -run="^$$fuzz$$" -fuzz="^$$fuzz$$" -fuzztime=$(FUZZTIME); \
 			done; \
 		fi; \
 	done
@@ -113,8 +164,11 @@ test-bench: $(BENCH_STAMP)
 
 $(BENCH_STAMP): $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
 	mkdir -p $(STAMP_DIR)
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) test -run=^$$ -bench=. -benchmem -benchtime=$(BENCHTIME) $(TEST_PKGS)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(TEST_TAGS_ARG) $(TEST_VERBOSE_ARG) -run=^$$ -bench=. -benchmem -benchtime=$(BENCHTIME) $(TEST_PKGS)
 	touch $(BENCH_STAMP)
+
+color-bench:
+	CGO_ENABLED=$(CGO_ENABLED) $(GRC) $(GO) test $(TEST_TAGS_ARG) $(TEST_VERBOSE_ARG) -run=^$$ -bench=. -benchmem -benchtime=$(BENCHTIME) $(TEST_PKGS)
 
 bench: test-bench
 
