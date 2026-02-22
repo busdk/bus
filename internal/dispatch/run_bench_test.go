@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"bus/internal/txfs"
 	"fmt"
 	"io"
 	"os"
@@ -401,6 +402,57 @@ func BenchmarkFilesEqualSameSizeDifferentContent(b *testing.B) {
 		if equal {
 			b.Fatalf("expected files to be different")
 		}
+	}
+}
+
+func BenchmarkMergeWorkspaceChangesToTxFSUnchangedTree(b *testing.B) {
+	for _, tc := range []struct {
+		name  string
+		files int
+		size  int
+	}{
+		{name: "files_64_size_4096", files: 64, size: 4 * 1024},
+		{name: "files_128_size_65536", files: 128, size: 64 * 1024},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			baseRoot := filepath.Join(b.TempDir(), "base")
+			newRoot := filepath.Join(b.TempDir(), "new")
+			overlayBase := filepath.Join(b.TempDir(), "overlay")
+
+			payload := bytesRepeat('x', tc.size)
+			for i := 0; i < tc.files; i++ {
+				rel := filepath.Join("dir", fmt.Sprintf("%04d", i), "file.bin")
+				basePath := filepath.Join(baseRoot, rel)
+				newPath := filepath.Join(newRoot, rel)
+				if err := os.MkdirAll(filepath.Dir(basePath), 0o755); err != nil {
+					b.Fatalf("mkdir base: %v", err)
+				}
+				if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+					b.Fatalf("mkdir new: %v", err)
+				}
+				if err := os.WriteFile(basePath, payload, 0o644); err != nil {
+					b.Fatalf("write base: %v", err)
+				}
+				if err := os.WriteFile(newPath, payload, 0o644); err != nil {
+					b.Fatalf("write new: %v", err)
+				}
+			}
+
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				overlayRoot := filepath.Join(overlayBase, fmt.Sprintf("run-%d", i))
+				fsOverlay, err := txfs.New(baseRoot, overlayRoot)
+				if err != nil {
+					b.Fatalf("new txfs: %v", err)
+				}
+				b.StartTimer()
+
+				if err := mergeWorkspaceChangesToTxFS(baseRoot, newRoot, fsOverlay); err != nil {
+					b.Fatalf("merge failed: %v", err)
+				}
+			}
+		})
 	}
 }
 
