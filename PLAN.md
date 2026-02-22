@@ -1,1 +1,8 @@
 - [x] Register in-process Tx-capable runners for real modules so `provider=fs` can run outside tests.
+- [ ] Optimize `withBusfileEnv`/`upsertEnv` to avoid rebuilding and rescanning the full env slice three times per command execution (`internal/dispatch/run.go`).
+- [ ] In `executeFSUnit`, compute batch journal file lists once per unit instead of calling `uniqueCommandFiles(commands)` for each journal state transition (`internal/dispatch/run.go`).
+- [ ] Reduce `provider=fs` per-command overhead by removing full workspace copy + full-tree diff/merge in `runModuleViaTempWorkspaceAndMerge` and using a more incremental change-capture strategy (`internal/dispatch/run.go`).
+- [ ] Replace linear tombstone prefix scans in `FS.isDeleted` with a path-indexed structure to prevent lookup cost from growing with delete count (`internal/txfs/txfs.go`).
+- [ ] Cache/deduplicate `lookPathEnv` resolution per target during busfile preflight/dispatch to avoid repeated PATH scans for the same command (`internal/dispatch/run.go`).
+- [ ] Reduce `FS.markDelete` scan cost (currently iterates full `changes` map per delete) by using an index that can remove descendants without O(n) full-map walks (`internal/txfs/txfs.go`).
+- [ ] Reduce allocation-heavy busfile command validation by replacing repeated `big.Rat` parsing in `validateJournalAdd`/`validateBankAddTransactions` with a lower-allocation decimal parser strategy while preserving exact money semantics (`internal/dispatch/run.go`, benchmarked in `internal/dispatch/run_bench_test.go`).

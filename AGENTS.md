@@ -70,6 +70,20 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 - Keep the dispatcher minimal: no business logic, no dataset I/O, no Git or network usage.
 - Implement behavior that matches the module contract above and the BusDK SDD (IF-001) now; do not add transitional or deferred behavior without a spec-backed requirement.
 
+## Performance guardrails (Go optimization guide)
+
+- Optimization guide reference: online at `https://docs.busdk.com/implementation/go-optimization-guide` and local mirror typically at `../docs/docs/implementation/go-optimization-guide.md`.
+- Standing guidance: when review/benchmark work reveals a reusable optimization anti-pattern or workflow improvement, update the local guide at `../docs/docs/implementation/go-optimization-guide.md` in the same change (not just repo-local TODOs).
+- Profile/benchmark first: for performance changes, capture a baseline benchmark (or pprof where appropriate) before changing code, then compare after.
+- Avoid repeated env-slice scans/copies in per-command loops. If command env keys are constant, build once and mutate minimally instead of re-running full `upsert` passes.
+- In hot loops, preallocate maps/slices with known bounds (`make(..., len(...))`) and avoid repeated reallocation churn.
+- Prefer algorithmic improvements over micro-tuning. Do not ship O(commands*env), O(files*workspace), or O(lookups*deletes) patterns on critical execution paths when indexed/incremental alternatives exist.
+- For `.bus` `provider=fs` paths, avoid full workspace copy + full-tree diff per command unless there is a measured, documented reason. Prefer change-scoped/incremental capture.
+- Avoid linear tombstone/prefix scans for each path lookup in TxFS when delete counts can grow; use path-indexed lookup structures.
+- Avoid recomputing deterministic derived values (for example sorted unique command-file lists) multiple times in the same execution unit.
+- Keep file operations streaming on large files (`io.Copy`, readers/writers) and avoid read-all patterns in commit/copy paths.
+- Use benchmark tests for hotspot-sensitive helpers and loops (`go test -run '^$' -bench ... -benchmem`), and include them with performance-oriented refactors.
+
 ## Quality gates
 
 - Build must succeed; `go test ./...` must pass.
@@ -91,3 +105,13 @@ This AGENTS.md was grounded in the following BusDK spec pages:
 
 1. .bus MUST be tracked; never add .bus or .bus/ to .gitignore.
 2. Runtime lock artifacts such as .bus-dev.lock may be ignored.
+
+## Session carry-forward notes
+
+- When starting from this repo alone, editing `../docs/docs/implementation/go-optimization-guide.md` may require higher-level workspace access; from the super-project root this should be editable directly.
+- Optimization-guide updates must be additive: do not remove prior guide content when adding new patterns.
+- Performance findings already benchmarked in this repo and worth upstreaming to the optimization guide:
+  - repeated env rewrites in per-command loops (`withBusfileEnv`/`upsertEnv`) show high allocation churn (`internal/dispatch/run_bench_test.go`)
+  - repeated PATH resolution of the same target in batch preflight/dispatch is expensive (`BenchmarkPreflightDispatchTargetsRepeatedLookups` in `internal/dispatch/run_bench_test.go`)
+  - tombstone lookup scaling is linear in delete count (`BenchmarkIsDeleted` in `internal/txfs/txfs_bench_test.go`)
+  - delete bookkeeping currently scans full `changes` map (`BenchmarkMarkDelete` in `internal/txfs/txfs_bench_test.go`)
