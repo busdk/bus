@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -75,6 +76,78 @@ func BenchmarkPreflightDispatchTargetsRepeatedLookups(b *testing.B) {
 			Argv: []string{"accounts", "list"},
 		}
 	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if err := preflightDispatchTargets(commands, env, cfg); err != nil {
+			b.Fatalf("preflight failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkPreflightDispatchTargetsUniqueLookups(b *testing.B) {
+	tempDir := b.TempDir()
+	env := []string{"PATH=" + tempDir}
+	cfg := busfileConfig{shellLookupEnabled: true}
+
+	commands := make([]busfileCommand, 256)
+	for i := range commands {
+		target := fmt.Sprintf("bench-%03d", i)
+		exe := filepath.Join(tempDir, "bus-"+target)
+		src := []byte("#!/bin/sh\nexit 0\n")
+		if runtime.GOOS == "windows" {
+			exe += ".exe"
+			src = []byte("@echo off\r\nexit /b 0\r\n")
+		}
+		if err := os.WriteFile(exe, src, 0o755); err != nil {
+			b.Fatalf("write fake command: %v", err)
+		}
+		commands[i] = busfileCommand{
+			File: "bench.bus",
+			Line: i + 1,
+			Raw:  target + " list",
+			Argv: []string{target, "list"},
+		}
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if err := preflightDispatchTargets(commands, env, cfg); err != nil {
+			b.Fatalf("preflight failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkPreflightDispatchTargetsUniqueLookupsWidePath(b *testing.B) {
+	const pathDirs = 64
+	dirs := make([]string, 0, pathDirs)
+	commands := make([]busfileCommand, 0, pathDirs)
+	for i := 0; i < pathDirs; i++ {
+		dir := filepath.Join(b.TempDir(), fmt.Sprintf("path-%03d", i))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			b.Fatalf("mkdir path dir: %v", err)
+		}
+		target := fmt.Sprintf("wide-%03d", i)
+		exe := filepath.Join(dir, "bus-"+target)
+		src := []byte("#!/bin/sh\nexit 0\n")
+		if runtime.GOOS == "windows" {
+			exe += ".exe"
+			src = []byte("@echo off\r\nexit /b 0\r\n")
+		}
+		if err := os.WriteFile(exe, src, 0o755); err != nil {
+			b.Fatalf("write fake command: %v", err)
+		}
+		dirs = append(dirs, dir)
+		commands = append(commands, busfileCommand{
+			File: "bench.bus",
+			Line: i + 1,
+			Raw:  target + " list",
+			Argv: []string{target, "list"},
+		})
+	}
+
+	env := []string{"PATH=" + strings.Join(dirs, string(os.PathListSeparator))}
+	cfg := busfileConfig{shellLookupEnabled: true}
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -158,6 +231,123 @@ func BenchmarkValidateBankAddTransactionsSingle(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if err := validateBankAddTransactions(args); err != nil {
 			b.Fatalf("validate failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkValidateBankAddTransactionsDateFieldsOnlySingle(b *testing.B) {
+	args := []string{
+		"--set", "booked_date=2026-02-22",
+		"--set", "value_date=2026-02-23",
+		"--set", "currency=EUR",
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if err := validateBankAddTransactions(args); err != nil {
+			b.Fatalf("validate failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkValidateBusfileCommandsBankAddTransactionsDateFieldsOnly(b *testing.B) {
+	commands := make([]busfileCommand, 256)
+	for i := range commands {
+		commands[i] = busfileCommand{
+			File: "bench.bus",
+			Line: i + 1,
+			Raw:  "bank add transactions --set booked_date=2026-02-22 --set value_date=2026-02-23 --set currency=EUR",
+			Argv: []string{
+				"bank", "add", "transactions",
+				"--set", "booked_date=2026-02-22",
+				"--set", "value_date=2026-02-23",
+				"--set", "currency=EUR",
+			},
+		}
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if err := validateBusfileCommands(commands); err != nil {
+			b.Fatalf("validate failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkIsISODate(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if !isISODate("2026-02-22") {
+			b.Fatalf("expected valid date")
+		}
+	}
+}
+
+func BenchmarkTokenizeBusLineJournalAdd(b *testing.B) {
+	line := `journal add --date 2026-02-22 --debit "assets:cash=123.45" --credit income:sales=123.45`
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		tokens, err := tokenizeBusLine(line)
+		if err != nil {
+			b.Fatalf("tokenize failed: %v", err)
+		}
+		if len(tokens) == 0 {
+			b.Fatalf("expected tokens")
+		}
+	}
+}
+
+func BenchmarkCollectBusfileCommands(b *testing.B) {
+	tempDir := b.TempDir()
+	busfile := filepath.Join(tempDir, "bench.bus")
+
+	var content strings.Builder
+	for i := 0; i < 512; i++ {
+		content.WriteString("journal add --date 2026-02-22 --debit assets:cash=123.45 --credit income:sales=123.45\n")
+	}
+	if err := os.WriteFile(busfile, []byte(content.String()), 0o600); err != nil {
+		b.Fatalf("write busfile: %v", err)
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		commands := make([]busfileCommand, 0, 512)
+		if err := collectBusfileCommands(busfile, map[string]bool{}, &commands); err != nil {
+			b.Fatalf("collect failed: %v", err)
+		}
+		if len(commands) != 512 {
+			b.Fatalf("expected 512 commands, got %d", len(commands))
+		}
+	}
+}
+
+func BenchmarkListSubcommandsDensePath(b *testing.B) {
+	tempDir := b.TempDir()
+	for i := 0; i < 256; i++ {
+		name := filepath.Join(tempDir, fmt.Sprintf("bus-cmd-%03d", i))
+		body := []byte("#!/bin/sh\nexit 0\n")
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+			body = []byte("@echo off\r\nexit /b 0\r\n")
+		}
+		if err := os.WriteFile(name, body, 0o755); err != nil {
+			b.Fatalf("write fake subcommand: %v", err)
+		}
+	}
+	for i := 0; i < 1024; i++ {
+		name := filepath.Join(tempDir, fmt.Sprintf("noise-%04d", i))
+		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
+			b.Fatalf("write noise file: %v", err)
+		}
+	}
+
+	env := []string{"PATH=" + tempDir}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		got := listSubcommands(env)
+		if len(got) != 256 {
+			b.Fatalf("expected 256 subcommands, got %d", len(got))
 		}
 	}
 }
