@@ -12,6 +12,21 @@ import (
 	"bus/internal/txfs"
 )
 
+func TestNoDefaultPrivateModuleInProcessRunners(t *testing.T) {
+	if _, ok := inProcessModuleRunners["bank"]; ok {
+		t.Fatalf("bank must not be a default in-process runner")
+	}
+	if _, ok := inProcessModuleRunners["journal"]; ok {
+		t.Fatalf("journal must not be a default in-process runner")
+	}
+	if _, ok := inProcessTxModuleRunners["bank"]; ok {
+		t.Fatalf("bank must not be a default in-process tx runner")
+	}
+	if _, ok := inProcessTxModuleRunners["journal"]; ok {
+		t.Fatalf("journal must not be a default in-process tx runner")
+	}
+}
+
 func TestRunBusfileShellLookupDisabledUsesInProcessRunner(t *testing.T) {
 	tempDir := t.TempDir()
 	busfile := filepath.Join(tempDir, "2024-02.bus")

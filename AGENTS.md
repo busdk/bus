@@ -23,14 +23,15 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 
 **Spec vs repo naming:** The CLI spec examples use `busdk ...`; this repo implements `bus` as the dispatcher. Use binary name `bus` and subcommand prefix `bus-` everywhere in this repository.
 
+**Visibility boundary:** `bus` is public/open-source. Treat `bus-*` modules as separate private repositories unless explicitly documented otherwise; do not add in-process dependencies from `bus` into private module internals.
+
 ## Invocation and behavior
 
 - **Pattern:** `bus <command> [args...]`. This module is the dispatcher; it does not implement domain subcommands.
 - **Dispatch:** Resolve the executable with `exec.LookPath("bus-" + name)` only, then exec with args unchanged, inheriting stdin, stdout, stderr, and environment.
-- **Busfile dispatch selection:** in `.bus` execution mode, prefer in-process module runners when available; otherwise use `bus-<target>` shell lookup only when `bus.busfile.dispatch.shell_lookup_enabled=true`.
+- **Busfile dispatch selection:** in `.bus` execution mode, only use in-process runners that are explicitly registered inside this open-source `bus` module; otherwise use `bus-<target>` shell lookup only when `bus.busfile.dispatch.shell_lookup_enabled=true`.
 - **FS transactions:** `provider=fs` is valid only when all busfile targets have in-process transaction-capable runners (Tx runners); otherwise fallback/error rules apply.
-- **Built-in in-process targets:** `bank` and `journal` are wired to library entrypoints; tests that need shell behavior should use non-wired targets or disable shell lookup explicitly.
-- **Built-in Tx-capable targets:** `bank` and `journal` have in-process Tx runner adapters (temp workspace + delta merge to TxFS) for `provider=fs`.
+- **No private module wiring:** do not add default in-process or in-process-tx runners for private/other-module commands (for example `bank` or `journal`) in this repository.
 - **No arguments:** Print a short usage line to stderr, exit 2, and include an available-commands list if any are discovered.
 - **Missing subcommand (not found in PATH):** stderr must start with `bus:` and mention the expected `bus-<name>` in PATH, then print usage and available commands; exit 127.
 - **Subcommand exit codes:** Pass through exactly. Unexpected exec failures return 1 with a short `bus:` error on stderr.

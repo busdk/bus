@@ -140,20 +140,8 @@ type inProcessModuleRunner func(args []string, env []string, stdin io.Reader, st
 type inProcessTxModuleRunner func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error)
 
 var inProcessModuleRunners = map[string]inProcessModuleRunner{
-	"bank": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
-		return runExternalBusModule("bank", args, env, stdin, stdout, stderr)
-	},
-	"journal": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
-		return runExternalBusModule("journal", args, env, stdin, stdout, stderr)
-	},
 }
 var inProcessTxModuleRunners = map[string]inProcessTxModuleRunner{
-	"bank": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error) {
-		return runModuleViaTempWorkspaceAndMerge(args, env, stdin, stdout, stderr, fs, inProcessModuleRunners["bank"])
-	},
-	"journal": func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error) {
-		return runModuleViaTempWorkspaceAndMerge(args, env, stdin, stdout, stderr, fs, inProcessModuleRunners["journal"])
-	},
 }
 
 func runExternalBusModule(target string, args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
@@ -741,7 +729,8 @@ func runModuleViaTempWorkspaceAndMerge(args []string, env []string, stdin io.Rea
 		return 1, err
 	}
 	defer os.RemoveAll(tmpRoot)
-	if err := copyWorkspaceTree(workspaceRoot, tmpRoot); err != nil {
+	snapshot, err := copyWorkspaceTree(workspaceRoot, tmpRoot)
+	if err != nil {
 		return 1, err
 	}
 	oldWD, err := os.Getwd()
@@ -749,11 +738,6 @@ func runModuleViaTempWorkspaceAndMerge(args []string, env []string, stdin io.Rea
 		return 1, err
 	}
 	if err := os.Chdir(tmpRoot); err != nil {
-		return 1, err
-	}
-	snapshot, err := captureWorkspaceSnapshot(tmpRoot)
-	if err != nil {
-		_ = os.Chdir(oldWD)
 		return 1, err
 	}
 	code, runErr := runner(args, env, stdin, stdout, stderr)
@@ -770,8 +754,9 @@ func runModuleViaTempWorkspaceAndMerge(args []string, env []string, stdin io.Rea
 	return 0, nil
 }
 
-func copyWorkspaceTree(srcRoot, dstRoot string) error {
-	return filepath.WalkDir(srcRoot, func(path string, d os.DirEntry, err error) error {
+func copyWorkspaceTree(srcRoot, dstRoot string) (map[string]workspaceFileInfo, error) {
+	snapshot := make(map[string]workspaceFileInfo)
+	err := filepath.WalkDir(srcRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -799,8 +784,18 @@ func copyWorkspaceTree(srcRoot, dstRoot string) error {
 		if !info.Mode().IsRegular() {
 			return nil
 		}
+		snapshot[rel] = workspaceFileInfo{
+			path:    dstPath,
+			size:    info.Size(),
+			modTime: info.ModTime().UnixNano(),
+			mode:    info.Mode().Perm(),
+		}
 		return copyFile(srcRoot, rel, dstRoot, info.Mode().Perm())
 	})
+	if err != nil {
+		return nil, err
+	}
+	return snapshot, nil
 }
 
 type workspaceFileInfo struct {
@@ -808,10 +803,6 @@ type workspaceFileInfo struct {
 	size    int64
 	modTime int64
 	mode    os.FileMode
-}
-
-func captureWorkspaceSnapshot(root string) (map[string]workspaceFileInfo, error) {
-	return listWorkspaceFiles(root)
 }
 
 func mergeWorkspaceChangesToTxFS(newRoot string, fsOverlay *txfs.FS, snapshot map[string]workspaceFileInfo) error {

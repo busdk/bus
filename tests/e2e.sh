@@ -300,30 +300,15 @@ EOF_REAL_FS_DP
 cat > "$REAL_FS_DIR/ok.bus" <<'EOF_REAL_FS_OK'
 bank init
 EOF_REAL_FS_OK
-(cd "$REAL_FS_DIR" && PATH="$TEST_PATH" "$BIN_PATH" ok.bus > "$REAL_FS_DIR/ok.out" 2> "$REAL_FS_DIR/ok.err")
-! test -s "$REAL_FS_DIR/ok.out"
-! test -s "$REAL_FS_DIR/ok.err"
-test -f "$REAL_FS_DIR/bank-imports.csv"
-test -f "$REAL_FS_DIR/bank-transactions.csv"
-
-FAIL_FS_DIR="$WORK_DIR/fs_real_module_fail"
-mkdir -p "$FAIL_FS_DIR"
-cat > "$FAIL_FS_DIR/datapackage.json" <<'EOF_FAIL_FS_DP'
-{"bus":{"busfile":{"transaction":{"provider":"fs","scope":"batch","fallback_to_none":false}}}}
-EOF_FAIL_FS_DP
-cat > "$FAIL_FS_DIR/fail.bus" <<'EOF_FAIL_FS'
-bank init
-bank nope
-EOF_FAIL_FS
 set +e
-(cd "$FAIL_FS_DIR" && PATH="$TEST_PATH" "$BIN_PATH" fail.bus > "$FAIL_FS_DIR/fail.out" 2> "$FAIL_FS_DIR/fail.err")
-real_fs_fail_code=$?
+(cd "$REAL_FS_DIR" && PATH="$TEST_PATH" "$BIN_PATH" ok.bus > "$REAL_FS_DIR/ok.out" 2> "$REAL_FS_DIR/ok.err")
+real_fs_code=$?
 set -e
-test "$real_fs_fail_code" -eq 2
-! test -s "$FAIL_FS_DIR/fail.out"
-grep -q 'command failed (exit 2)' "$FAIL_FS_DIR/fail.err"
-! test -e "$FAIL_FS_DIR/bank-imports.csv"
-! test -e "$FAIL_FS_DIR/bank-transactions.csv"
+test "$real_fs_code" -eq 127
+! test -s "$REAL_FS_DIR/ok.out"
+grep -q 'dispatch error: unknown target "bank"' "$REAL_FS_DIR/ok.err"
+! test -e "$REAL_FS_DIR/bank-imports.csv"
+! test -e "$REAL_FS_DIR/bank-transactions.csv"
 
 set +e
 PATH="$TEST_PATH" "$BIN_PATH" fail sample > "$WORK_DIR/fail.out" 2> "$WORK_DIR/fail.err"

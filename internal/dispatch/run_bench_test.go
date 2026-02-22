@@ -396,7 +396,7 @@ func BenchmarkMergeWorkspaceChangesToTxFSUnchangedTree(b *testing.B) {
 				}
 				b.StartTimer()
 
-				snapshot, err := captureWorkspaceSnapshot(newRoot)
+				snapshot, err := listWorkspaceFiles(newRoot)
 				if err != nil {
 					b.Fatalf("snapshot failed: %v", err)
 				}

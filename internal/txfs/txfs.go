@@ -72,6 +72,11 @@ func (fs *FS) OpenFile(name string, flag int, perm os.FileMode) (*os.File, error
 	if err != nil {
 		return nil, err
 	}
+	// Fast path for hot append/update loops on already materialized files.
+	if fs.changes[rel] == changeReplace {
+		overlayPath := filepath.Join(fs.overlay, rel)
+		return os.OpenFile(overlayPath, flag, perm)
+	}
 	overlayPath := filepath.Join(fs.overlay, rel)
 	if err := fs.ensureOverlayDir(filepath.Dir(overlayPath)); err != nil {
 		return nil, err
