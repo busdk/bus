@@ -36,11 +36,17 @@ BENCHMETA_CMD_PKG := ./cmd/$(BINARY)-benchmeta
 BENCHMETA_MAIN := cmd/$(BINARY)-benchmeta/main.go
 GO_FILES := $(shell find . -type f -name '*.go' -not -path './bin/*' -not -path './.make/*' | sort)
 TEST_FILES := $(shell find tests -type f | sort)
-GO_DEPS := Makefile go.mod $(wildcard go.sum)
+GO_DEPS := Makefile Makefile.local go.mod $(wildcard go.sum)
 MODULE_BIN_DEPS ?=
 MODULE_BIN_DEPS_PREFIX ?= ../
 MODULE_BIN_DEP_PATHS := $(foreach mod,$(MODULE_BIN_DEPS),$(MODULE_BIN_DEPS_PREFIX)$(mod)/bin/$(mod))
 MODULE_BIN_EXISTING_DEP_PATHS := $(foreach p,$(MODULE_BIN_DEP_PATHS),$(wildcard $(p)))
+MODULE_SRC_DEPS ?=
+MODULE_SRC_DEPS_PREFIX ?= ../
+MODULE_SRC_DEP_DIRS := $(foreach mod,$(MODULE_SRC_DEPS),$(MODULE_SRC_DEPS_PREFIX)$(mod))
+MODULE_SRC_DEP_GO_FILES := $(shell set -eu; for d in $(MODULE_SRC_DEP_DIRS); do [ -d "$$d" ] || continue; find "$$d" -type f -name '*.go' -not -path "$$d/bin/*" -not -path "$$d/.make/*"; done | sort)
+MODULE_SRC_DEP_MOD_FILES := $(foreach mod,$(MODULE_SRC_DEPS),$(wildcard $(MODULE_SRC_DEPS_PREFIX)$(mod)/go.mod) $(wildcard $(MODULE_SRC_DEPS_PREFIX)$(mod)/go.sum))
+BUILD_SRC_DEPS := $(MODULE_SRC_DEP_GO_FILES) $(MODULE_SRC_DEP_MOD_FILES)
 GOROOT := $(shell $(GO) env GOROOT)
 WASM_EXEC_JS := $(firstword $(wildcard $(GOROOT)/lib/wasm/wasm_exec.js $(GOROOT)/misc/wasm/wasm_exec.js))
 ifeq ($(ENABLE_WASM),1)
@@ -106,7 +112,7 @@ tidy:
 build-wasm: $(WASM_STAMP)
 
 ifeq ($(ENABLE_WASM),1)
-$(WASM_STAMP): $(GO_FILES) $(GO_DEPS)
+$(WASM_STAMP): $(GO_FILES) $(GO_DEPS) $(BUILD_SRC_DEPS)
 	mkdir -p $(STAMP_DIR)
 	test -n "$(WASM_BUILD_PKG)" || (echo "ENABLE_WASM=1 requires WASM_BUILD_PKG" >&2; exit 1)
 	test -n "$(WASM_OUT)" || (echo "ENABLE_WASM=1 requires WASM_OUT" >&2; exit 1)
@@ -123,11 +129,11 @@ endif
 
 build: ./bin/$(BINARY) $(WASM_STAMP)
 
-./bin/$(BINARY): $(GO_FILES) $(GO_DEPS) $(MODULE_BIN_EXISTING_DEP_PATHS) $(WASM_STAMP)
+./bin/$(BINARY): $(GO_FILES) $(GO_DEPS) $(MODULE_BIN_EXISTING_DEP_PATHS) $(BUILD_SRC_DEPS) $(WASM_STAMP)
 	mkdir -p ./bin
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(BUILD_TRIMPATH_ARG) $(BUILD_VCS_ARG) $(BUILD_LDFLAGS_ARG) $(BUILD_TAGS_ARG) -o ./bin/$(BINARY) $(CMD_PKG)
 
-build-debug: $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
+build-debug: $(GO_FILES) $(GO_DEPS) $(BUILD_SRC_DEPS) $(WASM_STAMP)
 	mkdir -p ./bin
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(BUILD_VCS_ARG) $(BUILD_TAGS_ARG) -gcflags '$(DEBUG_GCFLAGS)' -o ./bin/$(BINARY) $(CMD_PKG)
 
@@ -140,14 +146,14 @@ $(FMT_STAMP): $(GO_FILES)
 
 lint: $(LINT_STAMP)
 
-$(LINT_STAMP): $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
+$(LINT_STAMP): $(GO_FILES) $(GO_DEPS) $(BUILD_SRC_DEPS) $(WASM_STAMP)
 	mkdir -p $(STAMP_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet $(TEST_PKGS)
 	touch $(LINT_STAMP)
 
 test: $(TEST_STAMP)
 
-$(TEST_STAMP): $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
+$(TEST_STAMP): $(GO_FILES) $(GO_DEPS) $(BUILD_SRC_DEPS) $(WASM_STAMP)
 	mkdir -p $(STAMP_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(TEST_TAGS_ARG) $(TEST_VERBOSE_ARG) $(TEST_PKGS)
 	touch $(TEST_STAMP)
@@ -157,7 +163,7 @@ color-test:
 
 test-fuzz: $(FUZZ_STAMP)
 
-$(FUZZ_STAMP): $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
+$(FUZZ_STAMP): $(GO_FILES) $(GO_DEPS) $(BUILD_SRC_DEPS) $(WASM_STAMP)
 	mkdir -p $(STAMP_DIR)
 	@set -eu; \
 	for pkg in $(FUZZ_PKGS); do \
@@ -172,7 +178,7 @@ $(FUZZ_STAMP): $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
 
 test-bench: $(BENCH_STAMP)
 
-$(BENCH_STAMP): $(GO_FILES) $(GO_DEPS) $(WASM_STAMP)
+$(BENCH_STAMP): $(GO_FILES) $(GO_DEPS) $(BUILD_SRC_DEPS) $(WASM_STAMP)
 	mkdir -p $(STAMP_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(TEST_TAGS_ARG) $(TEST_VERBOSE_ARG) -run=^$$ -bench=. -benchmem -benchtime=$(BENCHTIME) $(TEST_PKGS)
 	touch $(BENCH_STAMP)

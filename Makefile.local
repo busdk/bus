@@ -1,2 +1,3 @@
 # Auto-derived from local module replace directives in go.mod.
-MODULE_BIN_DEPS :=
+# Rebuild bus when local replaced module sources change.
+MODULE_SRC_DEPS := 
