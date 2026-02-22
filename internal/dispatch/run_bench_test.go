@@ -408,6 +408,73 @@ func BenchmarkMergeWorkspaceChangesToTxFSUnchangedTree(b *testing.B) {
 	}
 }
 
+func BenchmarkRunModuleViaTempWorkspaceAndMerge(b *testing.B) {
+	for _, tc := range []struct {
+		name   string
+		files  int
+		size   int
+		mutate bool
+	}{
+		{name: "unchanged_files_32_size_4096", files: 32, size: 4 * 1024, mutate: false},
+		{name: "mutate_one_file_files_32_size_4096", files: 32, size: 4 * 1024, mutate: true},
+		{name: "unchanged_files_64_size_16384", files: 64, size: 16 * 1024, mutate: false},
+		{name: "mutate_one_file_files_64_size_16384", files: 64, size: 16 * 1024, mutate: true},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			workspaceRoot := b.TempDir()
+			overlayBase := b.TempDir()
+			payload := bytesRepeat('x', tc.size)
+			mutated := bytesRepeat('y', tc.size)
+			mutatedRel := filepath.Join("dir", "0000", "file.bin")
+
+			for i := 0; i < tc.files; i++ {
+				rel := filepath.Join("dir", fmt.Sprintf("%04d", i), "file.bin")
+				path := filepath.Join(workspaceRoot, rel)
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					b.Fatalf("mkdir workspace: %v", err)
+				}
+				if err := os.WriteFile(path, payload, 0o644); err != nil {
+					b.Fatalf("write workspace file: %v", err)
+				}
+			}
+
+			oldWD, err := os.Getwd()
+			if err != nil {
+				b.Fatalf("getwd: %v", err)
+			}
+			if err := os.Chdir(workspaceRoot); err != nil {
+				b.Fatalf("chdir workspace: %v", err)
+			}
+			b.Cleanup(func() {
+				_ = os.Chdir(oldWD)
+			})
+
+			runner := func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
+				if !tc.mutate {
+					return 0, nil
+				}
+				return 0, os.WriteFile(mutatedRel, mutated, 0o644)
+			}
+
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				overlayRoot := filepath.Join(overlayBase, fmt.Sprintf("run-%d", i))
+				fsOverlay, err := txfs.New(workspaceRoot, overlayRoot)
+				if err != nil {
+					b.Fatalf("new txfs: %v", err)
+				}
+				code, err := runModuleViaTempWorkspaceAndMerge(nil, nil, nil, io.Discard, io.Discard, fsOverlay, runner)
+				if err != nil {
+					b.Fatalf("runModuleViaTempWorkspaceAndMerge failed: %v", err)
+				}
+				if code != 0 {
+					b.Fatalf("unexpected exit code: %d", code)
+				}
+			}
+		})
+	}
+}
+
 func bytesRepeat(ch byte, n int) []byte {
 	buf := make([]byte, n)
 	for i := range buf {
