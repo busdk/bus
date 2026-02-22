@@ -45,3 +45,6 @@ tests/e2e_bus_bus_workspace/
 # local Go caches/temp dirs
 .gocache/
 .gotmp/
+
+# local temporary optimization notes
+.bus/dev/optimize.txt
