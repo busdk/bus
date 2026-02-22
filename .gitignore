@@ -46,5 +46,3 @@ tests/e2e_bus_bus_workspace/
 .gocache/
 .gotmp/
 
-# local temporary optimization notes
-.bus/dev/optimize.txt
