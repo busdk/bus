@@ -154,3 +154,44 @@ func BenchmarkStatExistingPath(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkCommitReplaceManyFiles(b *testing.B) {
+	for _, files := range []int{10, 100, 500} {
+		b.Run(fmt.Sprintf("files_%d", files), func(b *testing.B) {
+			root := b.TempDir()
+			overlayBase := b.TempDir()
+			payload := []byte("value\n")
+
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				overlay := filepath.Join(overlayBase, fmt.Sprintf("overlay-%d", i))
+				if err := os.MkdirAll(overlay, 0o755); err != nil {
+					b.Fatalf("mkdir overlay: %v", err)
+				}
+				fs := &FS{
+					root:      root,
+					overlay:   overlay,
+					changes:   make(map[string]changeKind, files),
+					tombstone: map[string]struct{}{},
+				}
+				for j := 0; j < files; j++ {
+					rel := filepath.Join("dir", fmt.Sprintf("%05d", j), "file.txt")
+					overlayPath := filepath.Join(overlay, rel)
+					if err := os.MkdirAll(filepath.Dir(overlayPath), 0o755); err != nil {
+						b.Fatalf("mkdir file dir: %v", err)
+					}
+					if err := os.WriteFile(overlayPath, payload, 0o644); err != nil {
+						b.Fatalf("write overlay file: %v", err)
+					}
+					fs.changes[rel] = changeReplace
+				}
+				b.StartTimer()
+
+				if err := fs.Commit(); err != nil {
+					b.Fatalf("commit failed: %v", err)
+				}
+			}
+		})
+	}
+}

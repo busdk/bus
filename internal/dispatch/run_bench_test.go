@@ -351,3 +351,63 @@ func BenchmarkListSubcommandsDensePath(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkFilesEqualSameSizeEqualContent(b *testing.B) {
+	tempDir := b.TempDir()
+	pathA := filepath.Join(tempDir, "a.bin")
+	pathB := filepath.Join(tempDir, "b.bin")
+	content := bytesRepeat('x', 256*1024)
+	if err := os.WriteFile(pathA, content, 0o600); err != nil {
+		b.Fatalf("write file a: %v", err)
+	}
+	if err := os.WriteFile(pathB, content, 0o600); err != nil {
+		b.Fatalf("write file b: %v", err)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		equal, err := filesEqual(pathA, pathB)
+		if err != nil {
+			b.Fatalf("filesEqual failed: %v", err)
+		}
+		if !equal {
+			b.Fatalf("expected files to be equal")
+		}
+	}
+}
+
+func BenchmarkFilesEqualSameSizeDifferentContent(b *testing.B) {
+	tempDir := b.TempDir()
+	pathA := filepath.Join(tempDir, "a.bin")
+	pathB := filepath.Join(tempDir, "b.bin")
+	contentA := bytesRepeat('x', 256*1024)
+	contentB := bytesRepeat('x', 256*1024)
+	contentB[0] = 'y'
+	if err := os.WriteFile(pathA, contentA, 0o600); err != nil {
+		b.Fatalf("write file a: %v", err)
+	}
+	if err := os.WriteFile(pathB, contentB, 0o600); err != nil {
+		b.Fatalf("write file b: %v", err)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		equal, err := filesEqual(pathA, pathB)
+		if err != nil {
+			b.Fatalf("filesEqual failed: %v", err)
+		}
+		if equal {
+			b.Fatalf("expected files to be different")
+		}
+	}
+}
+
+func bytesRepeat(ch byte, n int) []byte {
+	buf := make([]byte, n)
+	for i := range buf {
+		buf[i] = ch
+	}
+	return buf
+}
