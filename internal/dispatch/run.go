@@ -3,7 +3,6 @@ package dispatch
 import (
 	"bufio"
 	"bus/internal/txfs"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +13,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 )
@@ -111,6 +112,7 @@ type busfileExecutor interface {
 
 type hybridBusfileExecutor struct {
 	shellLookupEnabled bool
+	resolvedTargets    map[string]string
 }
 
 func (e hybridBusfileExecutor) Execute(command busfileCommand, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
@@ -131,7 +133,7 @@ func (e hybridBusfileExecutor) Execute(command busfileCommand, env []string, std
 	if !e.shellLookupEnabled {
 		return 127, fmt.Errorf("dispatch error: no in-process runner for target %q and shell lookup is disabled", target)
 	}
-	return runBusfileCommand(command, env, stdin, stdout, stderr)
+	return runBusfileCommand(command, env, stdin, stdout, stderr, e.resolvedTargets)
 }
 
 type inProcessModuleRunner func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error)
@@ -323,7 +325,8 @@ func runBusfilesWithExecutor(opts busfileOptions, env []string, stdin io.Reader,
 		fmt.Fprintf(stderr, "bus: %v\n", err)
 		return 1
 	}
-	if err := preflightDispatchTargets(commands, env, cfg); err != nil {
+	shellDispatchPaths, err := preflightDispatchTargets(commands, env, cfg)
+	if err != nil {
 		var bfErr busfileError
 		if errors.As(err, &bfErr) {
 			fmt.Fprintln(stderr, bfErr.Error())
@@ -348,7 +351,10 @@ func runBusfilesWithExecutor(opts busfileOptions, env []string, stdin io.Reader,
 
 	switch cfg.transactionProvider {
 	case "none":
-		executor := hybridBusfileExecutor{shellLookupEnabled: cfg.shellLookupEnabled}
+		executor := hybridBusfileExecutor{
+			shellLookupEnabled: cfg.shellLookupEnabled,
+			resolvedTargets:    shellDispatchPaths,
+		}
 		return executeBusfileCommands(commands, opts, env, stdin, stdout, stderr, executor)
 	case "fs":
 		return executeBusfileCommandsFS(commands, opts, env, stdin, stdout, stderr, cfg)
@@ -415,7 +421,9 @@ func validateBusfileCommands(commands []busfileCommand) error {
 	return nil
 }
 
-func preflightDispatchTargets(commands []busfileCommand, env []string, cfg busfileConfig) error {
+func preflightDispatchTargets(commands []busfileCommand, env []string, cfg busfileConfig) (map[string]string, error) {
+	resolved := make(map[string]string)
+	targetsToResolve := make(map[string]struct{})
 	for _, command := range commands {
 		if len(command.Argv) == 0 {
 			continue
@@ -425,24 +433,37 @@ func preflightDispatchTargets(commands []busfileCommand, env []string, cfg busfi
 			continue
 		}
 		if !cfg.shellLookupEnabled {
-			return busfileError{
+			return nil, busfileError{
 				File:     command.File,
 				Line:     command.Line,
 				Message:  fmt.Sprintf("dispatch error: shell lookup disabled and no in-process runner for target %q", target),
 				ExitCode: 127,
 			}
 		}
-		executable := "bus-" + target
-		if _, err := lookPathEnv(executable, env); err != nil {
-			return busfileError{
-				File:     command.File,
-				Line:     command.Line,
-				Message:  fmt.Sprintf("dispatch error: unknown target %q", target),
-				ExitCode: 127,
-			}
+		targetsToResolve[target] = struct{}{}
+	}
+
+	index := buildExecutableIndexForTargets(env, targetsToResolve)
+	for _, command := range commands {
+		if len(command.Argv) == 0 {
+			continue
+		}
+		target := command.Argv[0]
+		if hasInProcessRunner(target) || hasInProcessTxRunner(target) {
+			continue
+		}
+		if path, ok := index[target]; ok {
+			resolved[target] = path
+			continue
+		}
+		return nil, busfileError{
+			File:     command.File,
+			Line:     command.Line,
+			Message:  fmt.Sprintf("dispatch error: unknown target %q", target),
+			ExitCode: 127,
 		}
 	}
-	return nil
+	return resolved, nil
 }
 
 func hasInProcessRunner(target string) bool {
@@ -486,11 +507,12 @@ func allCommandsTxInProcess(commands []busfileCommand) bool {
 }
 
 func executeBusfileCommands(commands []busfileCommand, opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, executor busfileExecutor) int {
+	baseEnv := withBusBatchEnv(env)
 	for _, command := range commands {
 		if opts.trace {
 			fmt.Fprintf(stdout, "%s:%d: bus %s\n", command.File, command.Line, strings.Join(command.Argv, " "))
 		}
-		commandEnv := withBusfileEnv(env, command.File, command.Line)
+		commandEnv := withBusfileEnv(baseEnv, command.File, command.Line, "")
 		code, runErr := executor.Execute(command, commandEnv, stdin, stdout, stderr)
 		if runErr != nil {
 			fmt.Fprintf(stderr, "%s:%d: %v\n", command.File, command.Line, runErr)
@@ -568,24 +590,25 @@ func executeFSUnit(commands []busfileCommand, opts busfileOptions, env []string,
 	if err != nil {
 		return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to initialize: %v", err)
 	}
+	unitFiles := uniqueCommandFiles(commands)
 	if scope == "batch" {
 		if err := writeFSTxJournal(journalPath, fsTxJournal{
 			State:   "begun",
 			Scope:   scope,
 			TxID:    txID,
-			Files:   uniqueCommandFiles(commands),
+			Files:   unitFiles,
 			Updated: time.Now().UTC().Format(time.RFC3339Nano),
 		}); err != nil {
 			return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to write journal: %v", err)
 		}
 	}
 
+	baseEnv := withBusBatchEnv(env)
 	for _, command := range commands {
 		if opts.trace {
 			fmt.Fprintf(stdout, "%s:%d: bus %s\n", command.File, command.Line, strings.Join(command.Argv, " "))
 		}
-		commandEnv := withBusfileEnv(env, command.File, command.Line)
-		commandEnv = upsertEnv(commandEnv, "BUS_TRANSACTION_PROVIDER", "fs")
+		commandEnv := withBusfileEnv(baseEnv, command.File, command.Line, "fs")
 		code, runErr := runBusfileCommandFS(command, commandEnv, stdin, stdout, stderr, fsOverlay)
 		if runErr != nil {
 			_ = fsOverlay.Rollback()
@@ -604,7 +627,7 @@ func executeFSUnit(commands []busfileCommand, opts busfileOptions, env []string,
 			State:   "committing",
 			Scope:   scope,
 			TxID:    txID,
-			Files:   uniqueCommandFiles(commands),
+			Files:   unitFiles,
 			Updated: time.Now().UTC().Format(time.RFC3339Nano),
 		}); err != nil {
 			_ = fsOverlay.Rollback()
@@ -622,7 +645,7 @@ func executeFSUnit(commands []busfileCommand, opts busfileOptions, env []string,
 			State:   "committed",
 			Scope:   scope,
 			TxID:    txID,
-			Files:   uniqueCommandFiles(commands),
+			Files:   unitFiles,
 			Updated: time.Now().UTC().Format(time.RFC3339Nano),
 		}); err != nil {
 			return 1, fmt.Errorf("bus: transaction provider \"fs\" failed to finalize journal: %v", err)
@@ -728,6 +751,11 @@ func runModuleViaTempWorkspaceAndMerge(args []string, env []string, stdin io.Rea
 	if err := os.Chdir(tmpRoot); err != nil {
 		return 1, err
 	}
+	snapshot, err := captureWorkspaceSnapshot(tmpRoot)
+	if err != nil {
+		_ = os.Chdir(oldWD)
+		return 1, err
+	}
 	code, runErr := runner(args, env, stdin, stdout, stderr)
 	_ = os.Chdir(oldWD)
 	if runErr != nil {
@@ -736,7 +764,7 @@ func runModuleViaTempWorkspaceAndMerge(args []string, env []string, stdin io.Rea
 	if code != 0 {
 		return code, nil
 	}
-	if err := mergeWorkspaceChangesToTxFS(workspaceRoot, tmpRoot, fsOverlay); err != nil {
+	if err := mergeWorkspaceChangesToTxFS(tmpRoot, fsOverlay, snapshot); err != nil {
 		return 1, err
 	}
 	return 0, nil
@@ -775,32 +803,33 @@ func copyWorkspaceTree(srcRoot, dstRoot string) error {
 	})
 }
 
-func mergeWorkspaceChangesToTxFS(baseRoot, newRoot string, fsOverlay *txfs.FS) error {
-	baseFiles, err := listWorkspaceFiles(baseRoot)
-	if err != nil {
-		return err
-	}
+type workspaceFileInfo struct {
+	path    string
+	size    int64
+	modTime int64
+	mode    os.FileMode
+}
+
+func captureWorkspaceSnapshot(root string) (map[string]workspaceFileInfo, error) {
+	return listWorkspaceFiles(root)
+}
+
+func mergeWorkspaceChangesToTxFS(newRoot string, fsOverlay *txfs.FS, snapshot map[string]workspaceFileInfo) error {
 	newFiles, err := listWorkspaceFiles(newRoot)
 	if err != nil {
 		return err
 	}
 
-	for rel, newPath := range newFiles {
-		basePath, hadBase := baseFiles[rel]
-		if hadBase {
-			same, err := filesEqual(basePath, newPath)
-			if err != nil {
-				return err
-			}
-			if same {
-				continue
-			}
+	for rel, info := range newFiles {
+		baseline, hadBase := snapshot[rel]
+		if hadBase && baseline.size == info.size && baseline.modTime == info.modTime && baseline.mode == info.mode {
+			continue
 		}
-		if err := writeIntoTxFS(fsOverlay, rel, newPath); err != nil {
+		if err := writeIntoTxFS(fsOverlay, rel, info.path); err != nil {
 			return err
 		}
 	}
-	for rel := range baseFiles {
+	for rel := range snapshot {
 		if _, ok := newFiles[rel]; ok {
 			continue
 		}
@@ -811,8 +840,8 @@ func mergeWorkspaceChangesToTxFS(baseRoot, newRoot string, fsOverlay *txfs.FS) e
 	return nil
 }
 
-func listWorkspaceFiles(root string) (map[string]string, error) {
-	out := map[string]string{}
+func listWorkspaceFiles(root string) (map[string]workspaceFileInfo, error) {
+	out := map[string]workspaceFileInfo{}
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -840,7 +869,12 @@ func listWorkspaceFiles(root string) (map[string]string, error) {
 		if !info.Mode().IsRegular() {
 			return nil
 		}
-		out[rel] = path
+		out[rel] = workspaceFileInfo{
+			path:    path,
+			size:    info.Size(),
+			modTime: info.ModTime().UnixNano(),
+			mode:    info.Mode().Perm(),
+		}
 		return nil
 	})
 	return out, err
@@ -893,51 +927,6 @@ func writeIntoTxFS(fsOverlay *txfs.FS, relPath string, sourcePath string) error 
 		return err
 	}
 	return out.Sync()
-}
-
-func filesEqual(a, b string) (bool, error) {
-	infoA, err := os.Stat(a)
-	if err != nil {
-		return false, err
-	}
-	infoB, err := os.Stat(b)
-	if err != nil {
-		return false, err
-	}
-	if infoA.Size() != infoB.Size() {
-		return false, nil
-	}
-	fa, err := os.Open(a)
-	if err != nil {
-		return false, err
-	}
-	defer fa.Close()
-	fb, err := os.Open(b)
-	if err != nil {
-		return false, err
-	}
-	defer fb.Close()
-	bufA := make([]byte, 64*1024)
-	bufB := make([]byte, 64*1024)
-	for {
-		nA, errA := fa.Read(bufA)
-		nB, errB := fb.Read(bufB)
-		if nA != nB {
-			return false, nil
-		}
-		if nA > 0 && !bytes.Equal(bufA[:nA], bufB[:nA]) {
-			return false, nil
-		}
-		if errors.Is(errA, io.EOF) && errors.Is(errB, io.EOF) {
-			return true, nil
-		}
-		if errA != nil && !errors.Is(errA, io.EOF) {
-			return false, errA
-		}
-		if errB != nil && !errors.Is(errB, io.EOF) {
-			return false, errB
-		}
-	}
 }
 
 func registerTestBusfileRunners(env []string) {
@@ -1012,8 +1001,8 @@ func validateCommand(argv []string) error {
 }
 
 func validateJournalAdd(args []string) error {
-	debitTotal := new(big.Rat)
-	creditTotal := new(big.Rat)
+	var debitTotal decimalTotal
+	var creditTotal decimalTotal
 	hasDebit := false
 	hasCredit := false
 	for i := 0; i < len(args); i++ {
@@ -1037,19 +1026,19 @@ func validateJournalAdd(args []string) error {
 			if !ok || strings.TrimSpace(account) == "" || strings.TrimSpace(amountText) == "" {
 				return fmt.Errorf("journal add invalid posting %q", posting)
 			}
-			amount, ok := new(big.Rat).SetString(amountText)
+			amount, ok := parseDecimalAmount(amountText)
 			if !ok {
 				return fmt.Errorf("journal add invalid amount %q", amountText)
 			}
-			if amount.Sign() <= 0 {
+			if amount.value.Sign() <= 0 {
 				return fmt.Errorf("journal add amount must be positive: %q", amountText)
 			}
 			if arg == "--debit" {
 				hasDebit = true
-				debitTotal.Add(debitTotal, amount)
+				debitTotal.Add(amount)
 			} else {
 				hasCredit = true
-				creditTotal.Add(creditTotal, amount)
+				creditTotal.Add(amount)
 			}
 			i++
 		}
@@ -1058,7 +1047,7 @@ func validateJournalAdd(args []string) error {
 		return fmt.Errorf("journal add requires both debit and credit postings")
 	}
 	if debitTotal.Cmp(creditTotal) != 0 {
-		return fmt.Errorf("journal add unbalanced entry: debit=%s credit=%s", debitTotal.FloatString(10), creditTotal.FloatString(10))
+		return fmt.Errorf("journal add unbalanced entry: debit=%s credit=%s", debitTotal.String(), creditTotal.String())
 	}
 	return nil
 }
@@ -1081,7 +1070,7 @@ func validateBankAddTransactions(args []string) error {
 				return fmt.Errorf("bank add transactions invalid %s %q", key, value)
 			}
 		case "amount":
-			if _, ok := new(big.Rat).SetString(value); !ok {
+			if _, ok := parseDecimalAmount(value); !ok {
 				return fmt.Errorf("bank add transactions invalid amount %q", value)
 			}
 		case "currency":
@@ -1092,6 +1081,139 @@ func validateBankAddTransactions(args []string) error {
 		i++
 	}
 	return nil
+}
+
+type decimalAmount struct {
+	value *big.Int
+	scale int
+}
+
+type decimalTotal struct {
+	value big.Int
+	scale int
+}
+
+func (t *decimalTotal) Add(amount decimalAmount) {
+	if amount.scale > t.scale {
+		factor := pow10Big(amount.scale - t.scale)
+		t.value.Mul(&t.value, factor)
+		t.scale = amount.scale
+	}
+	if amount.scale < t.scale {
+		scaled := new(big.Int).Mul(amount.value, pow10Big(t.scale-amount.scale))
+		t.value.Add(&t.value, scaled)
+		return
+	}
+	t.value.Add(&t.value, amount.value)
+}
+
+func (t *decimalTotal) Cmp(other decimalTotal) int {
+	switch {
+	case t.scale == other.scale:
+		return t.value.Cmp(&other.value)
+	case t.scale > other.scale:
+		scaledOther := new(big.Int).Mul(&other.value, pow10Big(t.scale-other.scale))
+		return t.value.Cmp(scaledOther)
+	default:
+		scaledThis := new(big.Int).Mul(&t.value, pow10Big(other.scale-t.scale))
+		return scaledThis.Cmp(&other.value)
+	}
+}
+
+func (t *decimalTotal) String() string {
+	s := t.value.String()
+	negative := strings.HasPrefix(s, "-")
+	if negative {
+		s = strings.TrimPrefix(s, "-")
+	}
+	if t.scale == 0 {
+		if negative {
+			return "-" + s
+		}
+		return s
+	}
+	if len(s) <= t.scale {
+		s = strings.Repeat("0", t.scale-len(s)+1) + s
+	}
+	intPart := s[:len(s)-t.scale]
+	fracPart := strings.TrimRight(s[len(s)-t.scale:], "0")
+	if fracPart == "" {
+		if negative {
+			return "-" + intPart
+		}
+		return intPart
+	}
+	if negative {
+		return "-" + intPart + "." + fracPart
+	}
+	return intPart + "." + fracPart
+}
+
+func parseDecimalAmount(text string) (decimalAmount, bool) {
+	if text == "" {
+		return decimalAmount{}, false
+	}
+	start := 0
+	switch text[0] {
+	case '+':
+		start = 1
+	case '-':
+		start = 1
+	}
+	if start >= len(text) {
+		return decimalAmount{}, false
+	}
+	digits := make([]byte, 0, len(text)-start)
+	seenDot := false
+	scale := 0
+	seenDigit := false
+	for i := start; i < len(text); i++ {
+		ch := text[i]
+		switch {
+		case ch >= '0' && ch <= '9':
+			digits = append(digits, ch)
+			if seenDot {
+				scale++
+			}
+			seenDigit = true
+		case ch == '.':
+			if seenDot {
+				return decimalAmount{}, false
+			}
+			seenDot = true
+		default:
+			return decimalAmount{}, false
+		}
+	}
+	if !seenDigit {
+		return decimalAmount{}, false
+	}
+	value := new(big.Int)
+	if _, ok := value.SetString(string(digits), 10); !ok {
+		return decimalAmount{}, false
+	}
+	if text[0] == '-' {
+		value.Neg(value)
+	}
+	return decimalAmount{value: value, scale: scale}, true
+}
+
+var (
+	decimalPow10Mu    sync.Mutex
+	decimalPow10Cache = []*big.Int{big.NewInt(1)}
+)
+
+func pow10Big(power int) *big.Int {
+	if power <= 0 {
+		return decimalPow10Cache[0]
+	}
+	decimalPow10Mu.Lock()
+	defer decimalPow10Mu.Unlock()
+	for len(decimalPow10Cache) <= power {
+		next := new(big.Int).Mul(decimalPow10Cache[len(decimalPow10Cache)-1], big.NewInt(10))
+		decimalPow10Cache = append(decimalPow10Cache, next)
+	}
+	return decimalPow10Cache[power]
 }
 
 func isISODate(value string) bool {
@@ -1133,29 +1255,27 @@ func collectBusfileCommands(path string, stack map[string]bool, commands *[]busf
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	var logicalLine strings.Builder
+	logicalLine := make([]byte, 0, 256)
 	logicalStartLine := 0
 	for lineNo := 1; scanner.Scan(); lineNo++ {
-		line := scanner.Text()
-		if logicalLine.Len() == 0 {
-			trimmed := strings.TrimSpace(line)
+		line := scanner.Bytes()
+		if len(logicalLine) == 0 {
+			trimmed := strings.TrimSpace(string(line))
 			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 				continue
 			}
 			logicalStartLine = lineNo
-			logicalLine.WriteString(line)
+			logicalLine = append(logicalLine, line...)
 		} else {
-			logicalLine.WriteString(line)
+			logicalLine = append(logicalLine, line...)
 		}
-		current := logicalLine.String()
-		if hasLineContinuation(current) {
-			logicalLine.Reset()
-			logicalLine.WriteString(strings.TrimSuffix(current, "\\"))
+		if hasLineContinuationBytes(logicalLine) {
+			logicalLine = logicalLine[:len(logicalLine)-1]
 			continue
 		}
 
-		trimmed := strings.TrimSpace(current)
-		logicalLine.Reset()
+		trimmed := strings.TrimSpace(string(logicalLine))
+		logicalLine = logicalLine[:0]
 		logicalStart := logicalStartLine
 		logicalStartLine = 0
 
@@ -1196,7 +1316,7 @@ func collectBusfileCommands(path string, stack map[string]bool, commands *[]busf
 	if err := scanner.Err(); err != nil {
 		return busfileError{File: path, Message: err.Error(), ExitCode: 2}
 	}
-	if logicalLine.Len() > 0 {
+	if len(logicalLine) > 0 {
 		return busfileError{
 			File:     path,
 			Line:     logicalStartLine,
@@ -1211,47 +1331,55 @@ func hasLineContinuation(line string) bool {
 	return strings.HasSuffix(line, "\\")
 }
 
+func hasLineContinuationBytes(line []byte) bool {
+	if len(line) == 0 {
+		return false
+	}
+	return line[len(line)-1] == '\\'
+}
+
 func tokenizeBusLine(line string) ([]string, error) {
-	var tokens []string
-	var current strings.Builder
+	tokens := make([]string, 0, 8)
+	current := make([]byte, 0, len(line))
 	inSingle := false
 	inDouble := false
 	escaped := false
 	tokenStarted := false
 
 	flush := func() {
-		tokens = append(tokens, current.String())
-		current.Reset()
+		tokens = append(tokens, string(current))
+		current = current[:0]
 		tokenStarted = false
 	}
 
-	for _, r := range line {
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
 		if escaped {
-			current.WriteRune(r)
+			current = append(current, ch)
 			escaped = false
 			tokenStarted = true
 			continue
 		}
 		if inSingle {
-			if r == '\'' {
+			if ch == '\'' {
 				inSingle = false
 				continue
 			}
-			current.WriteRune(r)
+			current = append(current, ch)
 			tokenStarted = true
 			continue
 		}
 		if inDouble {
-			if r == '"' {
+			if ch == '"' {
 				inDouble = false
 				continue
 			}
-			current.WriteRune(r)
+			current = append(current, ch)
 			tokenStarted = true
 			continue
 		}
 
-		switch r {
+		switch ch {
 		case '\\':
 			escaped = true
 			tokenStarted = true
@@ -1266,9 +1394,9 @@ func tokenizeBusLine(line string) ([]string, error) {
 				flush()
 			}
 		case '|', ';', '<', '>':
-			return nil, fmt.Errorf("disallowed token %q", string(r))
+			return nil, fmt.Errorf("disallowed token %q", string(ch))
 		default:
-			current.WriteRune(r)
+			current = append(current, ch)
 			tokenStarted = true
 		}
 	}
@@ -1285,16 +1413,26 @@ func tokenizeBusLine(line string) ([]string, error) {
 	return tokens, nil
 }
 
-func runBusfileCommand(command busfileCommand, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
+func runBusfileCommand(command busfileCommand, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, resolvedTargets map[string]string) (int, error) {
 	if len(command.Argv) == 0 {
 		return 65, fmt.Errorf("syntax error: empty command")
 	}
 	subcommand := command.Argv[0]
 	executable := "bus-" + subcommand
 
-	path, err := lookPathEnv(executable, env)
-	if err != nil {
-		return 127, fmt.Errorf("dispatch error: unknown target %q", subcommand)
+	path := ""
+	if resolvedTargets != nil {
+		path = resolvedTargets[subcommand]
+	}
+	if path == "" {
+		var err error
+		path, err = lookPathEnv(executable, env)
+		if err != nil {
+			return 127, fmt.Errorf("dispatch error: unknown target %q", subcommand)
+		}
+		if resolvedTargets != nil {
+			resolvedTargets[subcommand] = path
+		}
 	}
 
 	cmd := exec.Command(path, command.Argv[1:]...)
@@ -1316,26 +1454,60 @@ func runBusfileCommand(command busfileCommand, env []string, stdin io.Reader, st
 	return 0, nil
 }
 
-func withBusfileEnv(env []string, file string, line int) []string {
-	withBatch := upsertEnv(env, "BUS_BATCH", "1")
-	withFile := upsertEnv(withBatch, "BUS_BUSFILE", file)
-	return upsertEnv(withFile, "BUS_BUSFILE_LINE", fmt.Sprintf("%d", line))
+func withBusBatchEnv(env []string) []string {
+	return withBusfileEnv(env, "", 0, "")
 }
 
-func upsertEnv(env []string, key, value string) []string {
-	prefix := key + "="
-	updated := make([]string, 0, len(env)+1)
-	found := false
+func withBusfileEnv(env []string, file string, line int, provider string) []string {
+	updated := make([]string, 0, len(env)+4)
+	foundBatch := false
+	foundFile := false
+	foundLine := false
+	foundProvider := provider == ""
+	lineValue := strconv.Itoa(line)
+
 	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			updated = append(updated, prefix+value)
-			found = true
-			continue
+		switch {
+		case strings.HasPrefix(entry, "BUS_BATCH="):
+			updated = append(updated, "BUS_BATCH=1")
+			foundBatch = true
+		case strings.HasPrefix(entry, "BUS_BUSFILE="):
+			if file != "" {
+				updated = append(updated, "BUS_BUSFILE="+file)
+				foundFile = true
+			} else {
+				updated = append(updated, entry)
+			}
+		case strings.HasPrefix(entry, "BUS_BUSFILE_LINE="):
+			if line > 0 {
+				updated = append(updated, "BUS_BUSFILE_LINE="+lineValue)
+				foundLine = true
+			} else {
+				updated = append(updated, entry)
+			}
+		case strings.HasPrefix(entry, "BUS_TRANSACTION_PROVIDER="):
+			if provider != "" {
+				updated = append(updated, "BUS_TRANSACTION_PROVIDER="+provider)
+				foundProvider = true
+			} else {
+				updated = append(updated, entry)
+			}
+		default:
+			updated = append(updated, entry)
 		}
-		updated = append(updated, entry)
 	}
-	if !found {
-		updated = append(updated, prefix+value)
+
+	if !foundBatch {
+		updated = append(updated, "BUS_BATCH=1")
+	}
+	if file != "" && !foundFile {
+		updated = append(updated, "BUS_BUSFILE="+file)
+	}
+	if line > 0 && !foundLine {
+		updated = append(updated, "BUS_BUSFILE_LINE="+lineValue)
+	}
+	if provider != "" && !foundProvider {
+		updated = append(updated, "BUS_TRANSACTION_PROVIDER="+provider)
 	}
 	return updated
 }
@@ -1671,59 +1843,37 @@ func listSubcommands(env []string) []string {
 		return nil
 	}
 
-	exts := map[string]struct{}{}
-	if runtime.GOOS == "windows" {
-		for _, ext := range windowsPathExts(env) {
-			if ext == "" {
-				continue
-			}
-			exts[strings.ToLower(ext)] = struct{}{}
-		}
-	}
+	exts := windowsExtSet(env)
 
 	seen := map[string]struct{}{}
 	for _, dir := range filepath.SplitList(pathValue) {
 		if dir == "" {
 			dir = "."
 		}
-		func() {
-			dirHandle, err := os.Open(dir)
-			if err != nil {
-				return
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
 			}
-			defer dirHandle.Close()
-
-			for {
-				entries, err := dirHandle.ReadDir(128)
-				if len(entries) == 0 && err == nil {
-					break
-				}
-				for _, entry := range entries {
-					name := entry.Name()
-					if !strings.HasPrefix(name, "bus-") {
-						continue
-					}
-					fullPath := filepath.Join(dir, name)
-					if !candidateExists(fullPath) {
-						continue
-					}
-					command, ok := subcommandFromFile(name, exts)
-					if !ok {
-						continue
-					}
-					if _, ok := seen[command]; ok {
-						continue
-					}
-					seen[command] = struct{}{}
-				}
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				if err != nil {
-					break
-				}
+			name := entry.Name()
+			if !strings.HasPrefix(name, "bus-") {
+				continue
 			}
-		}()
+			if !entryExecutable(entry) {
+				continue
+			}
+			command, ok := subcommandFromFile(name, exts)
+			if !ok {
+				continue
+			}
+			if _, ok := seen[command]; ok {
+				continue
+			}
+			seen[command] = struct{}{}
+		}
 	}
 
 	subcommands := make([]string, 0, len(seen))
@@ -1732,6 +1882,91 @@ func listSubcommands(env []string) []string {
 	}
 	sort.Strings(subcommands)
 	return subcommands
+}
+
+func windowsExtSet(env []string) map[string]struct{} {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	exts := map[string]struct{}{}
+	for _, ext := range windowsPathExts(env) {
+		if ext == "" {
+			continue
+		}
+		exts[strings.ToLower(ext)] = struct{}{}
+	}
+	return exts
+}
+
+func buildExecutableIndexForTargets(env []string, targets map[string]struct{}) map[string]string {
+	result := make(map[string]string, len(targets))
+	if len(targets) == 0 {
+		return result
+	}
+	pathValue, _ := lookupEnv(env, "PATH")
+	if pathValue == "" {
+		return result
+	}
+
+	needed := make(map[string]struct{}, len(targets))
+	for target := range targets {
+		needed["bus-"+target] = struct{}{}
+	}
+	exts := windowsExtSet(env)
+
+	for _, dir := range filepath.SplitList(pathValue) {
+		if len(needed) == 0 {
+			break
+		}
+		if dir == "" {
+			dir = "."
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if len(needed) == 0 {
+				break
+			}
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			commandName := name
+			if runtime.GOOS == "windows" {
+				ext := strings.ToLower(filepath.Ext(name))
+				if ext == "" {
+					continue
+				}
+				if _, ok := exts[ext]; !ok {
+					continue
+				}
+				commandName = strings.TrimSuffix(name, ext)
+			}
+			if _, ok := needed[commandName]; !ok {
+				continue
+			}
+			if !entryExecutable(entry) {
+				continue
+			}
+			fullPath := filepath.Join(dir, name)
+			result[strings.TrimPrefix(commandName, "bus-")] = fullPath
+			delete(needed, commandName)
+		}
+	}
+	return result
+}
+
+func entryExecutable(entry os.DirEntry) bool {
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	info, err := entry.Info()
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	return info.Mode().Perm()&0o111 != 0
 }
 
 func subcommandFromFile(name string, windowsExts map[string]struct{}) (string, bool) {
