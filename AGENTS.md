@@ -105,10 +105,8 @@ This AGENTS.md was grounded in the following BusDK spec pages:
 ## Gitignore Rule
 
 1. .bus MUST be tracked; never add .bus or .bus/ to .gitignore.
-2. Runtime lock artifacts such as .bus-dev.lock may be ignored.
-3. Never add any `.bus/**` path to `.gitignore` unless explicitly instructed by the user.
-4. The only normal `.bus` ignore exception is secrets material (for example `.bus/secrets/`).
-5. In private repositories, `.bus/secrets/` may be tracked when explicitly intended by the repo owner.
+2. In private repositories, .bus/ must be tracked; .bus/secrets may be tracked in private repositories only and must not be tracked otherwise.
+3. Runtime lock artifacts such as .bus-dev.lock may be ignored.
 
 ## Session carry-forward notes
 

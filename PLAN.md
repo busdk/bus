@@ -61,6 +61,21 @@
   - Expected e2e behavior: stderr emits short `bus: <exec error>` diagnostic and dispatcher exits 1 (not 127 and not subcommand passthrough code).
   - Target test scope: add one deterministic fixture command that triggers an exec startup failure and assert exact exit code and `bus:`-prefixed stderr contract.
 
+- [ ] E2E Gap: `--check` preflight dispatch/error behavior (`internal/dispatch/run.go` `runBusfilesWithExecutor` + `preflightDispatchTargets`).
+  - Affected flow: `bus --check <file.bus>` where targets are missing from PATH or blocked by `dispatch.shell_lookup_enabled=false`.
+  - Expected e2e behavior: `--check` still performs dispatch preflight and returns 127 with `file:line` dispatch diagnostics when target resolution fails (rather than silently succeeding).
+  - Target test scope: add focused `--check` error-path cases under `tests/e2e/` with deterministic stderr and exit-code assertions.
+
+- [ ] E2E Gap: busfile context env propagation to module execution (`internal/dispatch/run.go` `withBusBatchEnv` + `withBusfileEnv`).
+  - Affected flow: busfile command execution should set/overwrite `BUS_BATCH=1`, `BUS_BUSFILE`, `BUS_BUSFILE_LINE`, and `BUS_TRANSACTION_PROVIDER` (for `provider=fs`) in child/module environment.
+  - Expected e2e behavior: invoked module observes correct env values per command line and provider mode, including stable line attribution across multi-command files.
+  - Target test scope: add a deterministic env-echo fixture command in `tests/e2e/` and assert emitted env values for `provider=none` and `provider=fs`.
+
+- [ ] E2E Gap: unsupported transaction-provider fallback vs strict failure (`internal/dispatch/run.go` `resolveTransactionProvider`).
+  - Affected flow: config/preference sets `transaction.provider` to supported-but-unimplemented values (`git`, `snapshot`, `copy`) under both `fallback_to_none=true` and strict/CLI-override paths.
+  - Expected e2e behavior: fallback mode emits warning and executes with `none`; strict mode (or explicit CLI override) fails usage with exit 2 and provider-specific diagnostic.
+  - Target test scope: add provider-matrix e2e scenarios covering datapackage + CLI override combinations and exact stderr contract checks.
+
 ## Completed
 
 - [x] Optimize `runModuleViaTempWorkspaceAndMerge` full-workspace staging path in `internal/dispatch/run.go` (copy + snapshot + full-tree merge per command). Direction: avoid whole-tree copy/diff when command touches a narrow file set; move toward change-scoped capture/merge while keeping TxFS correctness.

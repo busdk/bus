@@ -26,26 +26,16 @@ assert_subject_unchanged() {
   }
 }
 
-run_case() {
-  local script="$1"
-  set +x
-  assert_subject_unchanged
-  set -x
-  bash "$script"
-  set +x
-  assert_subject_unchanged
-  set -x
-}
-
 [[ -x "$TEST_SUBJECT" ]] || {
   echo "e2e failed: test subject missing or not executable: ${TEST_SUBJECT}" >&2
   exit 1
 }
 EXPECTED_SUBJECT_HASH="$(hash_file "$TEST_SUBJECT")"
-set -x
 
 while IFS= read -r script; do
-  run_case "$script"
+  assert_subject_unchanged
+  (set -x; bash "$script")
+  assert_subject_unchanged
 done < <(find "${ROOT_DIR}/tests/e2e" -maxdepth 1 -type f -name '[0-9][0-9][0-9]-*.sh' | LC_ALL=C sort)
 
 echo "e2e.sh: PASS"
