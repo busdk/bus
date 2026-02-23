@@ -40,9 +40,6 @@ tests/e2e_bus_bus_workspace/
 # local bus development lock artifact
 .bus-dev.lock
 
-# local bus dev scratch notes
-.bus/dev/*.txt
-
 # local build override file
 
 # local Go caches/temp dirs

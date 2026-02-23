@@ -1,0 +1,30 @@
+Work mainly inside the current Go module to identify and verify performance optimization opportunities without changing production implementation code.
+
+Execution requirements:
+1. Start by reading and following module-local `AGENTS.md` (if the request says `AGETNS.md`, treat it as `AGENTS.md`).
+2. Read optimization guidance from `docs/docs/implementation/go-optimization-guide.md` (or `../docs/docs/implementation/go-optimization-guide.md` when running from a module directory).
+3. Review current optimization backlog in module-local `PLAN.md`.
+4. Perform a thorough scan of module Go code (`internal/**`, `cmd/**`, and tests/benchmarks) to find measurable performance hotspots.
+5. Do not edit implementation code in this pass. You may add benchmark tests and supporting test-only helpers.
+6. For each candidate, verify with benchmarks (`go test -run '^$' -bench ... -benchmem`) before claiming it.
+7. Only add findings that are benchmark-backed and not duplicates of existing PLAN items.
+8. For each new validated finding:
+   - Add a new unique unchecked item to module-local `PLAN.md` with concrete scope, affected files, and optimization direction.
+   - Append an additive section to `docs/docs/implementation/go-optimization-guide.md` (or `../docs/docs/implementation/go-optimization-guide.md` when running from a module directory) with:
+     - what the anti-pattern is,
+     - benchmark evidence (shape and representative numbers),
+     - runnable benchmark command,
+     - behavior/safety guardrails.
+9. Keep prior guide content intact; append only (no destructive rewrites).
+10. Keep benchmark naming explicit and grep-friendly.
+
+Quality gates before finishing:
+1. Run targeted benchmarks for new/updated benchmark cases and capture key numbers.
+2. Run `go test ./...` in the current module and ensure all tests pass.
+3. Report exactly what changed with file references and the key benchmark results.
+4. If no new findings are discovered, explicitly state that and include what was benchmarked.
+
+Output format expectations:
+- Findings first, ordered by impact.
+- Then changed files and benchmark commands/results.
+- Keep summary concise and technical.

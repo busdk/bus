@@ -1,0 +1,31 @@
+Work mainly inside the current module to automate end-to-end test verification and coverage-gap tracking without changing production implementation code.
+
+Execution requirements:
+1. Start by reading and following module-local `AGENTS.md` (if the request says `AGETNS.md`, treat it as `AGENTS.md`).
+2. If `tests/AGENTS.md` exists, read and follow it.
+3. Detect the module’s canonical e2e entrypoint (prefer `make test-e2e`, then `make e2e`, then `tests/e2e.sh` if present).
+4. Run the full module e2e suite from module root.
+5. If e2e fails, identify the exact failing script/assert and apply minimal deterministic test fixes only; do not hide failures with broad fallbacks.
+6. Audit implemented CLI/API/runtime surface against current e2e coverage by scanning module implementation code and e2e scripts.
+7. For uncovered implemented behavior, add new unique unchecked items to module-local `PLAN.md`.
+8. Keep each new PLAN item concrete: affected endpoint/flag/path/flow, expected e2e behavior, and target test scope.
+9. Do not edit production implementation in this pass.
+10. Do not mark PLAN items as done unless module e2e evidence exists.
+
+Coverage audit focus areas (adapt to module context):
+- startup and flag behavior
+- routing/dispatch success and failure paths
+- core module operations and error contracts
+- read-only/dry-run or equivalent safety semantics
+- stream/event semantics when applicable
+
+Quality gates before finishing:
+1. Module e2e entrypoint passes.
+2. If e2e scripts changed, keep them simple and feature-focused per local test conventions.
+3. Report changed files and exact PLAN items added/updated.
+4. If no coverage gaps are found, state that explicitly and list what was audited.
+
+Output format expectations:
+- Failures/findings first.
+- Then coverage gaps added to `PLAN.md`.
+- Then test run result summary.

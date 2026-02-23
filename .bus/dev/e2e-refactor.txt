@@ -1,0 +1,49 @@
+Work mainly inside the current module to refactor monolithic e2e coverage into split, focused scripts using a consistent runner/lib/numbered-script structure.
+
+Primary objective:
+1. Replace the single large `tests/e2e.sh` scenario implementation with:
+   1. A thin runner at `tests/e2e.sh`.
+   2. Numbered focused scripts in `tests/e2e/NNN-*.sh`.
+   3. Shared helpers in `tests/e2e/lib.sh`.
+2. Preserve current test coverage and externally visible behavior.
+
+Execution requirements:
+1. Start by reading and following module-local `AGENTS.md` (if the request says `AGETNS.md`, treat it as `AGENTS.md`).
+2. If `tests/AGENTS.md` exists, read and follow it. If it does not exist, add one consistent with module test conventions.
+3. Keep the runner minimal:
+   1. `set -euo pipefail`.
+   2. Resolve module root and test subject binary.
+   3. Hash-check the binary before and after each case (fail if changed during run).
+   4. Execute numbered scripts in deterministic numeric order.
+   5. Keep shell-trace driven output (`set -x`) so each case appears as one executed command line.
+4. Replace monolithic scenario logic in `tests/e2e.sh` with:
+   1. A thin runner at `tests/e2e.sh`.
+   2. Numbered focused scripts in `tests/e2e/NNN-*.sh`.
+   3. Shared helpers in `tests/e2e/lib.sh`.
+5. Keep each script focused on one behavior area and reusable fixtures in `tests/e2e/lib.sh`.
+6. Preserve existing workspace/cleanup behavior, including `BUS_E2E_KEEP`.
+7. Keep assertions explicit and script-friendly (`test`, `grep`, `diff`, exit-code checks).
+8. Do not weaken assertions; maintain or improve determinism.
+9. If any case cannot be cleanly isolated, document why and still split as far as practical.
+
+Suggested split shape (adapt as needed, but keep deterministic numbering):
+1. global flags/help/version/no-args/missing-subcommand behavior.
+2. subcommand dispatch and PATH precedence behavior.
+3. `.bus` file parsing and preflight failures.
+4. `--check` validation-path behaviors.
+5. `--trace` output behavior.
+6. transaction provider config fallback/strict/shell-lookup behaviors.
+7. fs transaction commit/rollback/large-file path.
+8. failing subcommand exit-code passthrough.
+
+Quality gates:
+1. Run the module’s canonical e2e entrypoint (prefer `make test-e2e`, then `make e2e`, then `tests/e2e.sh`) and ensure pass.
+2. Run `make test` in the module and ensure pass.
+3. Keep changes limited to e2e scripts + test docs/policies unless a minimal test-only support change is required.
+4. Verify no behavior regressions by retaining all existing key assertions.
+
+Output/report expectations:
+1. List changed files.
+2. Summarize script split map (`old coverage -> new script`).
+3. Include exact commands run and pass/fail status.
+4. If anything remains monolithic, list the blocker and next split step.
