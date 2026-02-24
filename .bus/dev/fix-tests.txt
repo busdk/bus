@@ -1,0 +1,71 @@
+# Reusable fix-tests action (bus dev)
+
+You are `bus dev` executing an autonomous module-local fix action.
+Assume current working directory is already the failing module root (for example `bus-accounts`, `bus-validate`, `bus`, etc.).
+Run Makefile-based fixes without waiting for user confirmation, unless execution is blocked by a hard external constraint.
+
+Goal: Fix failing tests deterministically with minimal behavior change and regression coverage.
+
+1. Capture context from failure output
+- Paste the exact failure block: test name(s), package path, first assertion line, and command used.
+- Record test environment details you can see: Go version, OS/arch, and key env vars from the failure context.
+
+2. Read local governance
+- Read `./AGENTS.md` and any module-local instruction file required by scope.
+- Respect mandatory test/e2e requirements before code changes.
+
+3. Run baseline reproduction
+- From module root, run deterministic compile and focused test targets:
+  - `make build`
+  - `make test TEST_PKGS=./<failing/package/path>`
+- For one failing test, include a targeted Go invocation only if needed:
+  - `go test ./<failing/package/path> -run '^TestName$' -count=1`
+
+4. Stabilize repro
+- Keep reruns deterministic (`-count=1`, consistent order, same package filter).
+- Avoid changing unrelated env while reproducing.
+- If module uses extra tags in normal flow, preserve defaults or pass explicit `TEST_TAGS` through Make:
+  - `make test TEST_PKGS=./<pkg> TEST_TAGS='<tags>'`
+5. Fix autonomously
+- Read the failing test and implementation.
+- Classify failure type (assertion, fixture, logic, or edge case).
+- Apply the smallest cohesive change in module source and/or tests.
+- If command output changed output format or user-visible behavior, update docs/tests in same change set.
+
+5b. Quick iteration guardrail
+- If single-package iteration is safe and fast, use:
+  - `make test TEST_PKGS=./<failing/package/path> TEST_VERBOSE=0`
+- If the package uses multiple packages, keep package filters narrow and repeatable.
+
+6. Add regression tests
+- Update or add unit tests for the exact failure path.
+- If module instructions require, add corresponding e2e coverage in the same change set.
+- Keep fixtures isolated and deterministic (temp dirs or module-local fixture data only).
+
+7. Validate
+- Re-run targeted module scope with Make:
+  - `make test TEST_PKGS=./<failing/package/path>`
+- Re-run module-wide quality checks when scope changed:
+  - `make test`
+  - `make lint`
+  - `make check` (only if required by AGENTS and accepted runtime cost).
+
+8. Stop condition
+- Continue until focused tests pass and mandated checks complete.
+- If blocked by immutable failures (environment/tooling/network/read/write permissions), report exactly what is blocked and why.
+
+9. Final report format
+- Provide:
+  - root cause,
+  - files changed,
+  - regression tests added/updated,
+  - command outputs summary (`make build`, focused `make test`, and any final full-module checks),
+  - any residual risk or follow-up needed.
+
+10. Never do
+- Don’t chase speculation not anchored to the failing stack trace.
+- Don’t relax assertions.
+- Don’t change unrelated modules or behavior.
+- Don’t run full superproject/module sweeps unless explicitly requested.
+
+Use this as copy/paste: paste failures, then execute steps 2 through 9 automatically.

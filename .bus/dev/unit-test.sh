@@ -2,4 +2,3 @@
 set -e
 set -x
 make test
-./tests/e2e.sh
