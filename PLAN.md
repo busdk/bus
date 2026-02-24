@@ -16,6 +16,16 @@
 
 ## E2E coverage gaps
 
+- [ ] E2E Gap: command discoverability determinism with PATH shadowing and inaccessible entries (`internal/dispatch/run.go` `listSubcommands`).
+  - Affected flow: `bus` no-args and `bus --help` when `PATH` contains duplicate `bus-*` commands across directories and at least one unreadable PATH directory.
+  - Expected e2e behavior: output includes each command name once, resolved from the earliest PATH occurrence, and silently skips unreadable PATH entries.
+  - Target test scope: add assertions in `tests/e2e/010-global-flags-help-missing.sh` (or a focused follow-up e2e file) for duplicate-command shadowing and unreadable PATH directory handling.
+
+- [ ] E2E Gap: direct path-qualified subcommand execution (`internal/dispatch/run.go` `lookPathEnv` + `Run`).
+  - Affected flow: dispatch targets provided with path separators (for example `bus ./bin/bus-accounts`, `bus /tmp/bus-status`) and forwarded global flags.
+  - Expected e2e behavior: PATH lookup is bypassed, the given executable is run directly, args are preserved, and exit codes pass through unchanged.
+  - Target test scope: add focused e2e coverage near `tests/e2e/020-dispatch-and-path-precedence.sh` for explicit-path executables with pass-through args and failure code assertions.
+
 - [ ] E2E Gap: global flag parser error contracts (`internal/dispatch/run.go` `parseGlobalFlags`).
   - Affected flow: `bus --unknown`, `bus -C`, `bus --format`, and `bus --` without subcommand.
   - Expected e2e behavior: emit `bus: invalid usage: ...` on stderr, print usage, and exit 2 with no stdout.
