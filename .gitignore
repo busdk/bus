@@ -41,6 +41,7 @@ tests/e2e_bus_bus_workspace/
 .bus-dev.lock
 
 # local build override file
+FEATURES.md
 
 # local Go caches/temp dirs
 .gocache/
