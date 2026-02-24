@@ -40,9 +40,6 @@ tests/e2e_bus_bus_workspace/
 # local bus development lock artifact
 .bus-dev.lock
 
-# local build override file
-FEATURES.md
-
 # local Go caches/temp dirs
 .gocache/
 .gotmp/
