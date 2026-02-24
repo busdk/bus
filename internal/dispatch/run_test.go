@@ -227,6 +227,42 @@ func TestRunDispatchesAndPassesArgs(t *testing.T) {
 	}
 }
 
+func TestRunAuditEvidenceCoverageAliasDispatchesToValidate(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "validate", "VALIDATE")
+	env := prependPath(os.Environ(), tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "audit", "evidence-coverage", "--year", "2026"}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "VALIDATE:evidence-coverage --year 2026\n" {
+		t.Fatalf("unexpected alias stdout: %q", stdout.String())
+	}
+}
+
+func TestRunAuditEvidenceCoverageAliasRequiresSubcommand(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "validate", "VALIDATE")
+	env := prependPath(os.Environ(), tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "audit"}, env, nil, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "audit requires subcommand evidence-coverage") {
+		t.Fatalf("unexpected audit usage error: %q", stderr.String())
+	}
+}
+
 func TestRunPassesExitCode(t *testing.T) {
 	t.Parallel()
 
@@ -456,6 +492,9 @@ func referenceSubcommands(dir string, env []string) []string {
 	}
 
 	commands := make([]string, 0, len(seen))
+	if _, ok := seen["validate"]; ok {
+		seen["audit"] = struct{}{}
+	}
 	for command := range seen {
 		commands = append(commands, command)
 	}

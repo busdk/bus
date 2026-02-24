@@ -57,6 +57,9 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 
 	path, err := lookPathEnv(executable, env)
 	if err != nil {
+		if subcommand == "audit" {
+			return runAuditAlias(parsed, env, stdin, stdout, stderr)
+		}
 		if subcommand == "help" {
 			writeUsage(env, stderr)
 			return 2
@@ -85,6 +88,38 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 		return 1
 	}
 
+	return 0
+}
+
+func runAuditAlias(parsed parseResult, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	if len(parsed.subcommandArgs) == 0 || parsed.subcommandArgs[0] != "evidence-coverage" {
+		fmt.Fprintln(stderr, "bus: invalid usage: audit requires subcommand evidence-coverage")
+		fmt.Fprintln(stderr, "usage: bus audit evidence-coverage [args...]")
+		return 2
+	}
+	path, err := lookPathEnv("bus-validate", env)
+	if err != nil {
+		fmt.Fprintln(stderr, "bus: missing subcommand: audit evidence-coverage requires executable named bus-validate in PATH")
+		return 127
+	}
+	childArgs := append([]string{}, parsed.passThroughFlags...)
+	childArgs = append(childArgs, "evidence-coverage")
+	childArgs = append(childArgs, parsed.subcommandArgs[1:]...)
+	cmd := exec.Command(path, childArgs...)
+	cmd.Env = env
+	cmd.Stdin = stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if runErr := cmd.Run(); runErr != nil {
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
+			if code := exitErr.ExitCode(); code >= 0 {
+				return code
+			}
+		}
+		fmt.Fprintln(stderr, "bus: "+runErr.Error())
+		return 1
+	}
 	return 0
 }
 
@@ -139,10 +174,8 @@ func (e hybridBusfileExecutor) Execute(command busfileCommand, env []string, std
 type inProcessModuleRunner func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error)
 type inProcessTxModuleRunner func(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, fs *txfs.FS) (int, error)
 
-var inProcessModuleRunners = map[string]inProcessModuleRunner{
-}
-var inProcessTxModuleRunners = map[string]inProcessTxModuleRunner{
-}
+var inProcessModuleRunners = map[string]inProcessModuleRunner{}
+var inProcessTxModuleRunners = map[string]inProcessTxModuleRunner{}
 
 func runExternalBusModule(target string, args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {
 	executable := "bus-" + target
@@ -1867,6 +1900,11 @@ func listSubcommands(env []string) []string {
 		}
 	}
 
+	if _, hasValidate := seen["validate"]; hasValidate {
+		if _, hasAudit := seen["audit"]; !hasAudit {
+			seen["audit"] = struct{}{}
+		}
+	}
 	subcommands := make([]string, 0, len(seen))
 	for name := range seen {
 		subcommands = append(subcommands, name)

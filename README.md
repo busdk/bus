@@ -37,6 +37,15 @@ bus accounts summary --month=2026-01
 This resolves and runs `bus-accounts` from `PATH`, passing through arguments,
 stdin, stdout, stderr, and environment unchanged.
 
+Special audit alias:
+
+```sh
+bus audit evidence-coverage [args...]
+```
+
+If `bus-audit` is not available, this delegates to `bus-validate evidence-coverage`
+for deterministic evidence-coverage reporting.
+
 ### Special case: `help`
 
 If `bus-help` exists on `PATH`, `bus help ...` dispatches to it.
