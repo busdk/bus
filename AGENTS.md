@@ -117,3 +117,14 @@ This AGENTS.md was grounded in the following BusDK spec pages:
   - repeated PATH resolution of the same target in batch preflight/dispatch is expensive (`BenchmarkPreflightDispatchTargetsRepeatedLookups` in `internal/dispatch/run_bench_test.go`)
   - tombstone lookup scaling is linear in delete count (`BenchmarkIsDeleted` in `internal/txfs/txfs_bench_test.go`)
   - delete bookkeeping currently scans full `changes` map (`BenchmarkMarkDelete` in `internal/txfs/txfs_bench_test.go`)
+
+## Shared Superproject Conventions
+
+- Prefer minimal, deterministic, script-friendly behavior.
+- Deletion safety: tracked paths use `git rm` (or `git rm --cached`), untracked paths use `rm`.
+- When a system-level CLI command fails due to incorrect parameters, record the correct invocation in the most relevant `AGENTS.md`.
+- On macOS/BSD `cat`, `-A` is unsupported; use `cat -vet` or `sed -n 'l'` to visualize tabs and line endings instead.
+- On macOS/BSD `awk`, avoid using `in` as a variable name (`in` is reserved in `for (x in y)`); use names like `inside` instead.
+- When running shell commands that contain backticks in regex/pattern arguments (for example with `rg`), wrap the full command in single quotes or escape backticks to avoid command-substitution parse errors.
+- `rg` does not support look-around by default; use `rg --pcre2` when patterns require look-ahead/look-behind.
+- Use `python3` (not `python`) for Python scripting in this environment.
