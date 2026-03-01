@@ -128,3 +128,10 @@ This AGENTS.md was grounded in the following BusDK spec pages:
 - When running shell commands that contain backticks in regex/pattern arguments (for example with `rg`), wrap the full command in single quotes or escape backticks to avoid command-substitution parse errors.
 - `rg` does not support look-around by default; use `rg --pcre2` when patterns require look-ahead/look-behind.
 - Use `python3` (not `python`) for Python scripting in this environment.
+
+## Global unit documentation traceability rule
+
+- Every top-level production-code unit (`func`, `type`, `var`, and `const` blocks when they define global API/behavior) must include an inline comment that states its purpose.
+- For each top-level global unit, also include concise `Used by:` traceability in the inline comment (or immediately adjacent comment) that names the primary caller(s), owning flow, or integration point.
+- Keep `Used by:` comments accurate when refactoring: update or remove stale references in the same change set.
+- Do not add new undocumented top-level global units.
