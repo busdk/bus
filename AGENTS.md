@@ -10,6 +10,8 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 
 **Non-goals:** No business logic, no dataset/schema I/O, no Git operations, no network, no module-specific flags beyond shared BusDK CLI conventions. The dispatcher does not implement `--dry-run` or workspace/Git checks; subcommands handle those per the CLI spec.
 
+**Update-check policy:** The public `bus` dispatcher intentionally does **not** integrate `github.com/busdk/bus-update/pkg/updatecheck` startup enforcement. Update-check behavior belongs to `bus-*` module binaries, not the public dispatcher.
+
 **Canonical sources (BusDK spec):**
 
 - [BusDK Design Document](https://docs.busdk.com/)
