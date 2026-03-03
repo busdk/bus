@@ -33,5 +33,5 @@ make check
 
 - Include tests for every behavior change.
 - Keep output and exit-code changes explicit in tests.
-- Update docs in `../docs/docs/modules/bus.md` and `../docs/docs/sdd/bus.md` when behavior changes.
+- Update docs in `../docs/docs/modules/bus.md` and `.sdd/docs/modules/bus.md` when behavior changes.
 - Keep implementation minimal and deterministic.

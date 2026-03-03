@@ -15,7 +15,7 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 **Canonical sources (BusDK spec):**
 
 - [BusDK Design Document](https://docs.busdk.com/)
-- [BusDK Software Design Document (SDD)](https://docs.busdk.com/sdd) — goals, requirements, IF-001 (dispatcher routing)
+- [BusDK Software Design Document (SDD)](sdd/docs/sdd.md) — goals, requirements, IF-001 (dispatcher routing)
 - [Command structure and discoverability](https://docs.busdk.com/cli/command-structure)
 - [Independent modules](https://docs.busdk.com/architecture/independent-modules)
 - [Error handling, dry-run, and diagnostics](https://docs.busdk.com/cli/error-handling-dry-run-diagnostics)
@@ -98,11 +98,11 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 This AGENTS.md was grounded in the following BusDK spec pages:
 
 - [docs.busdk.com](https://docs.busdk.com/) — design spec entrypoint
-- [docs.busdk.com/sdd](https://docs.busdk.com/sdd) — SDD (IF-001 bus dispatcher, goals, NFRs)
+- [docs.busdk.com/sdd](sdd/docs/sdd.md) — SDD (IF-001 bus dispatcher, goals, NFRs)
 - [docs.busdk.com/cli/command-structure](https://docs.busdk.com/cli/command-structure) — command layout and discoverability
 - [docs.busdk.com/architecture/independent-modules](https://docs.busdk.com/architecture/independent-modules) — module boundaries, no CLI-to-CLI as API
 - [docs.busdk.com/cli/error-handling-dry-run-diagnostics](https://docs.busdk.com/cli/error-handling-dry-run-diagnostics) — exit codes, stderr diagnostics, script-friendly behavior
-- [docs.busdk.com/sdd/modules](https://docs.busdk.com/sdd/modules) — module index (dispatcher described in main SDD, not a separate module SDD)
+- [sdd/docs/modules/modules.md](sdd/docs/modules/modules.md) — module index (dispatcher described in main SDD, not a separate module SDD)
 
 ## Gitignore Rule
 

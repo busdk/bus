@@ -5,7 +5,7 @@ from `PATH` and stays intentionally minimal.
 
 Canonical references:
 - Design: https://docs.busdk.com/
-- Bus SDD: https://docs.busdk.com/sdd/bus
+- Bus SDD: sdd/docs/modules/bus.md
 - Bus module docs: https://docs.busdk.com/modules/bus
 - Command structure: https://docs.busdk.com/cli/command-structure
 
