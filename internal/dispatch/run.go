@@ -102,9 +102,7 @@ func runAuditAlias(parsed parseResult, env []string, stdin io.Reader, stdout io.
 		fmt.Fprintln(stderr, "bus: missing subcommand: audit evidence-coverage requires executable named bus-validate in PATH")
 		return 127
 	}
-	childArgs := append([]string{}, parsed.passThroughFlags...)
-	childArgs = append(childArgs, "evidence-coverage")
-	childArgs = append(childArgs, parsed.subcommandArgs[1:]...)
+	childArgs := auditAliasArgs(parsed)
 	cmd := exec.Command(path, childArgs...)
 	cmd.Env = env
 	cmd.Stdin = stdin
@@ -121,6 +119,23 @@ func runAuditAlias(parsed parseResult, env []string, stdin io.Reader, stdout io.
 		return 1
 	}
 	return 0
+}
+
+// auditAliasArgs maps `bus audit evidence-coverage ...` arguments to the bus-validate invocation.
+// Used by: runAuditAlias dispatcher fallback when bus-audit is not present.
+func auditAliasArgs(parsed parseResult) []string {
+	aliasArgs := append([]string{}, parsed.subcommandArgs[1:]...)
+	for _, arg := range aliasArgs {
+		if arg == "-h" || arg == "--help" {
+			childArgs := append([]string{}, parsed.passThroughFlags...)
+			childArgs = append(childArgs, "--help", "evidence-coverage")
+			return childArgs
+		}
+	}
+	childArgs := append([]string{}, parsed.passThroughFlags...)
+	childArgs = append(childArgs, "evidence-coverage")
+	childArgs = append(childArgs, aliasArgs...)
+	return childArgs
 }
 
 type busfileOptions struct {

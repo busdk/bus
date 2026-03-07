@@ -245,6 +245,42 @@ func TestRunAuditEvidenceCoverageAliasDispatchesToValidate(t *testing.T) {
 	}
 }
 
+func TestRunAuditEvidenceCoverageAliasHelpFlagDispatchesToValidateHelp(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "validate", "VALIDATE")
+	env := prependPath(os.Environ(), tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "audit", "evidence-coverage", "-h"}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "VALIDATE:--help evidence-coverage\n" {
+		t.Fatalf("unexpected alias help stdout: %q", stdout.String())
+	}
+}
+
+func TestRunAuditEvidenceCoverageAliasLongHelpFlagDispatchesToValidateHelp(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "validate", "VALIDATE")
+	env := prependPath(os.Environ(), tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "audit", "evidence-coverage", "--help"}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "VALIDATE:--help evidence-coverage\n" {
+		t.Fatalf("unexpected alias help stdout: %q", stdout.String())
+	}
+}
+
 func TestRunAuditEvidenceCoverageAliasRequiresSubcommand(t *testing.T) {
 	t.Parallel()
 

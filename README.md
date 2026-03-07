@@ -44,7 +44,9 @@ bus audit evidence-coverage [args...]
 ```
 
 If `bus-audit` is not available, this delegates to `bus-validate evidence-coverage`
-for deterministic evidence-coverage reporting.
+for deterministic evidence-coverage reporting. Alias-local help is also supported:
+`bus audit evidence-coverage -h` and `bus audit evidence-coverage --help` print the
+underlying evidence-coverage help surface and exit `0`.
 
 ### Special case: `help`
 

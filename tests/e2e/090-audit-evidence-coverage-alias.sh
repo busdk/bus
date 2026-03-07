@@ -14,6 +14,14 @@ PATH="$TEST_PATH" "$BIN" audit evidence-coverage --year 2026 > "$WS/audit_alias.
 diff -u <(printf 'VALIDATE:evidence-coverage --year 2026\n') "$WS/audit_alias.out"
 ! test -s "$WS/audit_alias.err"
 
+PATH="$TEST_PATH" "$BIN" audit evidence-coverage -h > "$WS/audit_alias_help_short.out" 2> "$WS/audit_alias_help_short.err"
+diff -u <(printf 'VALIDATE:--help evidence-coverage\n') "$WS/audit_alias_help_short.out"
+! test -s "$WS/audit_alias_help_short.err"
+
+PATH="$TEST_PATH" "$BIN" audit evidence-coverage --help > "$WS/audit_alias_help_long.out" 2> "$WS/audit_alias_help_long.err"
+diff -u <(printf 'VALIDATE:--help evidence-coverage\n') "$WS/audit_alias_help_long.out"
+! test -s "$WS/audit_alias_help_long.err"
+
 PATH="$TEST_PATH" "$BIN" --help > "$WS/help.out" 2> "$WS/help.err"
 ! test -s "$WS/help.err"
 grep -q '^  audit$' "$WS/help.out"
