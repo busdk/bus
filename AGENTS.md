@@ -123,6 +123,10 @@ This AGENTS.md was grounded in the following BusDK spec pages:
 ## Shared Superproject Conventions
 
 - Prefer minimal, deterministic, script-friendly behavior.
+- This module AGENTS.md must remain usable when the module is checked out on its own; duplicate any operational guidance needed to work in this module instead of assuming the superproject root is present.
+- Prefer reusable, approval-friendly commands over ad hoc shell recipes: use this module's standard interfaces first (for example make test, make e2e, make check, go test ./...) instead of long bash -lc, pipelines, temporary trace files, or chained command sequences.
+- When a standard Makefile target exists for the needed action in this module, use that target as the default command surface before falling back to lower-level commands.
+- Keep commands simple and repeatable so they are easy to rerun locally and easy to approve; avoid one-off compound shell invocations unless no reusable interface exists.
 - Deletion safety: tracked paths use `git rm` (or `git rm --cached`), untracked paths use `rm`.
 - When a system-level CLI command fails due to incorrect parameters, record the correct invocation in the most relevant `AGENTS.md`.
 - On macOS/BSD `cat`, `-A` is unsupported; use `cat -vet` or `sed -n 'l'` to visualize tabs and line endings instead.
