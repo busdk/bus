@@ -90,3 +90,5 @@
 
 - [x] Optimize `runModuleViaTempWorkspaceAndMerge` full-workspace staging path in `internal/dispatch/run.go` (copy + snapshot + full-tree merge per command). Direction: avoid whole-tree copy/diff when command touches a narrow file set; move toward change-scoped capture/merge while keeping TxFS correctness.
 - [x] Optimize repeated `txfs.OpenFile` writes on already-materialized paths in `internal/txfs/txfs.go` (steady-state append/create loops). Direction: add a lower-overhead fast path that minimizes repeated path normalization/index mutations and overlay-dir checks when `changeReplace` is already established.
+
+- [x] Add dispatcher-level `--perf` global flag forwarding and help/docs coverage in `bus`, so performance tracing can be enabled consistently for subcommands without breaking existing global-flag behavior, with unit tests and e2e coverage in the same change.

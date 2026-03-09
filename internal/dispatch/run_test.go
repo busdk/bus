@@ -189,6 +189,27 @@ func TestRunParsesGlobalFlagsBeforeSubcommand(t *testing.T) {
 	}
 }
 
+func TestRunForwardsPerfFlagBeforeSubcommand(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "status", "PRIMARY")
+	env := setEnv(os.Environ(), "PATH", tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "--perf", "status", "--version"}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "PRIMARY:--version\n" {
+		t.Fatalf("unexpected delegated args: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "INFO bus-status status ") {
+		t.Fatalf("expected perf timing line, got %q", stderr.String())
+	}
+}
+
 func TestRunDoubleDashTerminatesGlobalParsing(t *testing.T) {
 	t.Parallel()
 

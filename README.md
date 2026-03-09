@@ -74,9 +74,10 @@ When listing available commands, `bus`:
 
 ## Global flags
 
-This module intentionally does not implement dispatcher-level global flags such
-as `--version`, `--color`, `--format`, `--output`, `--quiet`, `--dry-run`, or
-`--chdir`. These are handled by subcommands per BusDK CLI conventions.
+This module forwards subcommand global flags such as `--color`, `--format`,
+`--output`, `--quiet`, `--dry-run`, and `--chdir` to the selected `bus-*`
+binary. It also accepts dispatcher-level `--perf`, which enables timing output
+for the dispatched command and sets `BUS_PERF=1` for instrumented modules.
 
 ## Development
 

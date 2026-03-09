@@ -72,12 +72,14 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 	childArgs := append([]string{}, parsed.passThroughFlags...)
 	childArgs = append(childArgs, parsed.subcommandArgs...)
 	cmd := exec.Command(path, childArgs...)
-	cmd.Env = env
+	cmd.Env = withPerfEnv(env, parsed.perf)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
+	start := time.Now()
 	if err := cmd.Run(); err != nil {
+		logCommandDuration(stderr, parsed, time.Since(start))
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			if code := exitErr.ExitCode(); code >= 0 {
@@ -87,6 +89,8 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 		fmt.Fprintln(stderr, "bus: "+err.Error())
 		return 1
 	}
+
+	logCommandDuration(stderr, parsed, time.Since(start))
 
 	return 0
 }
@@ -1782,6 +1786,8 @@ func isValidScope(value string) bool {
 type parseResult struct {
 	help             bool
 	version          bool
+	perf             bool
+	verbosity        int
 	subcommand       string
 	passThroughFlags []string
 	subcommandArgs   []string
@@ -1808,11 +1814,15 @@ func parseGlobalFlags(args []string) (parseResult, error) {
 			return parsed, nil
 		case arg == "-q" || arg == "--quiet" || arg == "--no-color":
 			parsed.passThroughFlags = append(parsed.passThroughFlags, arg)
+		case arg == "--perf":
+			parsed.perf = true
 		case arg == "-v" || arg == "--verbose":
 			parsed.passThroughFlags = append(parsed.passThroughFlags, arg)
+			parsed.verbosity++
 		case strings.HasPrefix(arg, "-") && len(arg) > 2 && strings.Trim(arg[1:], "v") == "":
 			for range len(arg[1:]) {
 				parsed.passThroughFlags = append(parsed.passThroughFlags, "-v")
+				parsed.verbosity++
 			}
 		case strings.HasPrefix(arg, "--color="):
 			parsed.passThroughFlags = append(parsed.passThroughFlags, arg)
@@ -1857,6 +1867,7 @@ func writeHelp(env []string, stdout io.Writer) {
 	fmt.Fprintln(stdout, "  -h, --help")
 	fmt.Fprintln(stdout, "  -V, --version")
 	fmt.Fprintln(stdout, "  -v, --verbose")
+	fmt.Fprintln(stdout, "  --perf")
 	fmt.Fprintln(stdout, "  -q, --quiet")
 	fmt.Fprintln(stdout, "  -C, --chdir <dir>")
 	fmt.Fprintln(stdout, "  -o, --output <file>")
@@ -1873,6 +1884,51 @@ func writeHelp(env []string, stdout io.Writer) {
 	for _, name := range subcommands {
 		fmt.Fprintf(stdout, "  %s\n", name)
 	}
+}
+
+// withPerfEnv overlays BUS_PERF=1 onto child environments when perf mode is enabled.
+// Used by: Run before exec-ing bus-* child commands.
+func withPerfEnv(env []string, perf bool) []string {
+	if !perf {
+		return env
+	}
+	out := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "BUS_PERF=") {
+			out = append(out, "BUS_PERF=1")
+			replaced = true
+			continue
+		}
+		out = append(out, entry)
+	}
+	if !replaced {
+		out = append(out, "BUS_PERF=1")
+	}
+	return out
+}
+
+// logCommandDuration emits one deterministic timing line for a completed dispatched command.
+// Used by: Run after child command completion and failure paths.
+func logCommandDuration(stderr io.Writer, parsed parseResult, d time.Duration) {
+	level := ""
+	switch {
+	case parsed.perf:
+		level = "INFO"
+	case parsed.verbosity > 0:
+		level = "DEBUG"
+	default:
+		return
+	}
+	moduleName := "bus-" + parsed.subcommand
+	op := parsed.subcommand
+	for _, arg := range parsed.subcommandArgs {
+		if !strings.HasPrefix(arg, "-") && arg != "--" {
+			op = arg
+			break
+		}
+	}
+	fmt.Fprintf(stderr, "%s %s %s %.3f\n", level, moduleName, op, d.Seconds())
 }
 
 // Issue: https://github.com/busdk/bus/issues/2 - enumerate bus-* executables on PATH.
