@@ -3,6 +3,11 @@
 `bus` is the BusDK top-level dispatcher. It executes `bus-<command>` binaries
 from `PATH` and stays intentionally minimal.
 
+This repository must stay independent from private `bus-*` module repositories.
+It integrates with modules only by executing `bus-<command>` processes from
+`PATH`; it must not import private module Go packages or add build-time sibling
+module dependencies.
+
 Canonical references:
 - Design: https://docs.busdk.com/
 - Bus SDD: sdd/docs/modules/bus.md

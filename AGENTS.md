@@ -26,6 +26,7 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 **Spec vs repo naming:** The CLI spec examples use `busdk ...`; this repo implements `bus` as the dispatcher. Use binary name `bus` and subcommand prefix `bus-` everywhere in this repository.
 
 **Visibility boundary:** `bus` is public/open-source. Treat `bus-*` modules as separate private repositories unless explicitly documented otherwise; do not add in-process dependencies from `bus` into private module internals.
+`bus` must remain an independent project: no Go imports from `github.com/busdk/bus-*`, no `go.mod` `require`/`replace` edges to private `bus-*` repositories, and no Makefile source/bin dependency wiring to sibling `bus-*` modules. Integration with modules happens only by executing `bus-<command>` binaries across the process boundary.
 
 ## Invocation and behavior
 
@@ -34,6 +35,7 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 - **Busfile dispatch selection:** in `.bus` execution mode, only use in-process runners that are explicitly registered inside this open-source `bus` module; otherwise use `bus-<target>` shell lookup only when `bus.busfile.dispatch.shell_lookup_enabled=true`.
 - **FS transactions:** `provider=fs` is valid only when all busfile targets have in-process transaction-capable runners (Tx runners); otherwise fallback/error rules apply.
 - **No private module wiring:** do not add default in-process or in-process-tx runners for private/other-module commands (for example `bank` or `journal`) in this repository.
+- **No private repository coupling:** do not import `bus-data` or any other `bus-*` Go package into this repo, and do not add local replace or build-time sibling-module dependencies here. The dispatcher stays standalone and talks to other modules only through executable dispatch.
 - **No arguments:** Print a short usage line to stderr, exit 2, and include an available-commands list if any are discovered.
 - **Missing subcommand (not found in PATH):** stderr must start with `bus:` and mention the expected `bus-<name>` in PATH, then print usage and available commands; exit 127.
 - **Subcommand exit codes:** Pass through exactly. Unexpected exec failures return 1 with a short `bus:` error on stderr.
@@ -114,7 +116,9 @@ This AGENTS.md was grounded in the following BusDK spec pages:
 ## Session carry-forward notes
 
 - When starting from this repo alone, editing `../docs/docs/implementation/go-optimization-guide.md` may require higher-level workspace access; from the super-project root this should be editable directly.
+- When working from the BusDK superproject root, the shared dispatcher SDD is at `sdd/docs/modules/bus.md`, not under `bus/sdd/...`.
 - Optimization-guide updates must be additive: do not remove prior guide content when adding new patterns.
+- For content searches limited to Go files in this repo from the superproject root, use `rg ... bus --glob '*.go'`; do not pass recursive shell-glob paths like `bus/**/*.go` as positional arguments to `rg`.
 - Performance findings already benchmarked in this repo and worth upstreaming to the optimization guide:
   - repeated env rewrites in per-command loops (`withBusfileEnv`/`upsertEnv`) show high allocation churn (`internal/dispatch/run_bench_test.go`)
   - repeated PATH resolution of the same target in batch preflight/dispatch is expensive (`BenchmarkPreflightDispatchTargetsRepeatedLookups` in `internal/dispatch/run_bench_test.go`)
