@@ -184,7 +184,7 @@ func TestRunParsesGlobalFlagsBeforeSubcommand(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
 	}
-	if stdout.String() != "PRIMARY:-q -C / --color=never --version\n" {
+	if stdout.String() != "PRIMARY:--quiet --no-color --chdir / --version\n" {
 		t.Fatalf("unexpected delegated args: %q", stdout.String())
 	}
 }
@@ -205,7 +205,7 @@ func TestRunForwardsPerfFlagBeforeSubcommand(t *testing.T) {
 	if stdout.String() != "PRIMARY:--version\n" {
 		t.Fatalf("unexpected delegated args: %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "INFO bus-status status ") {
+	if !strings.Contains(stderr.String(), "INFO perf bus-status status ") {
 		t.Fatalf("expected perf timing line, got %q", stderr.String())
 	}
 }
@@ -711,6 +711,160 @@ func TestRunBusfileExecutesCommands(t *testing.T) {
 	}
 	if !strings.Contains(got, "LEDGER:post --id m2\n") {
 		t.Fatalf("expected ledger invocation, got %q", got)
+	}
+}
+
+func TestRunBusfileStickyGlobalDirectivesApplyAndOverride(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+	buildFakeSubcommand(t, tempDir, "ledger", "LEDGER")
+
+	busfile := filepath.Join(tempDir, "sticky.bus")
+	content := strings.Join([]string{
+		"--perf",
+		"-v",
+		"--chdir data",
+		"accounts alpha",
+		"--chdir reports",
+		"--no-verbose",
+		"ledger beta",
+		"--no-perf",
+		"accounts gamma",
+		"",
+	}, "\n")
+	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
+		t.Fatalf("write busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", busfile}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", code, stderr.String())
+	}
+
+	outputLines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(outputLines) != 3 {
+		t.Fatalf("expected 3 output lines, got %d: %q", len(outputLines), stdout.String())
+	}
+	if outputLines[0] != "ACCOUNTS:-v --chdir data alpha" {
+		t.Fatalf("unexpected first command argv: %q", outputLines[0])
+	}
+	if outputLines[1] != "LEDGER:--chdir reports beta" {
+		t.Fatalf("unexpected second command argv: %q", outputLines[1])
+	}
+	if outputLines[2] != "ACCOUNTS:--chdir reports gamma" {
+		t.Fatalf("unexpected third command argv: %q", outputLines[2])
+	}
+
+	perfLines := 0
+	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+		if strings.Contains(line, " perf ") {
+			perfLines++
+		}
+	}
+	if perfLines != 2 {
+		t.Fatalf("expected exactly 2 perf lines before --no-perf, got %d: %q", perfLines, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "INFO perf bus-accounts alpha ") {
+		t.Fatalf("expected perf line for first command, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "INFO perf bus-ledger beta ") {
+		t.Fatalf("expected perf line for second command, got %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "INFO perf bus-accounts gamma ") {
+		t.Fatalf("did not expect perf line after --no-perf, got %q", stderr.String())
+	}
+}
+
+func TestRunBusfileStickyGlobalDirectiveRejectsHelpAndVersion(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+
+	busfile := filepath.Join(tempDir, "bad-directive.bus")
+	content := strings.Join([]string{
+		"--help",
+		"accounts alpha",
+		"",
+	}, "\n")
+	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
+		t.Fatalf("write busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", busfile}, env, nil, &stdout, &stderr)
+	if code != 65 {
+		t.Fatalf("expected exit 65, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected no stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "syntax error: busfile global directive cannot use --help or --version") {
+		t.Fatalf("expected directive syntax error, got %q", stderr.String())
+	}
+}
+
+func TestRunBusfileStickyGlobalsPropagateIntoIncludedBusfiles(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+
+	included := filepath.Join(tempDir, "another.bus")
+	if err := os.WriteFile(included, []byte("accounts beta\naccounts gamma\n"), 0o600); err != nil {
+		t.Fatalf("write included busfile: %v", err)
+	}
+
+	root := filepath.Join(tempDir, "all.bus")
+	content := strings.Join([]string{
+		"--perf",
+		"--chdir data",
+		"another.bus",
+		"--no-perf",
+		"accounts delta",
+		"",
+	}, "\n")
+	if err := os.WriteFile(root, []byte(content), 0o600); err != nil {
+		t.Fatalf("write root busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", root}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", code, stderr.String())
+	}
+
+	outputLines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(outputLines) != 3 {
+		t.Fatalf("expected 3 output lines, got %d: %q", len(outputLines), stdout.String())
+	}
+	if outputLines[0] != "ACCOUNTS:--chdir data beta" {
+		t.Fatalf("unexpected first included argv: %q", outputLines[0])
+	}
+	if outputLines[1] != "ACCOUNTS:--chdir data gamma" {
+		t.Fatalf("unexpected second included argv: %q", outputLines[1])
+	}
+	if outputLines[2] != "ACCOUNTS:--chdir data delta" {
+		t.Fatalf("unexpected post-reset argv: %q", outputLines[2])
+	}
+
+	if !strings.Contains(stderr.String(), "INFO perf bus-accounts beta ") {
+		t.Fatalf("expected perf line for first included command, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "INFO perf bus-accounts gamma ") {
+		t.Fatalf("expected perf line for second included command, got %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "INFO perf bus-accounts delta ") {
+		t.Fatalf("did not expect perf after --no-perf, got %q", stderr.String())
 	}
 }
 

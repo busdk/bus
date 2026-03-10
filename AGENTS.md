@@ -66,6 +66,7 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 - Tests must be hermetic and deterministic (no network).
 - Use temporary PATH entries and compiled fake subcommands (`go build` into a temp dir) to validate dispatch behavior and listing determinism.
 - Run the full suite with `go test ./...` before considering the change done.
+- `tests/e2e.sh` executes the built dispatcher binary at `bin/bus`; rebuild with `make build` before e2e when dispatcher code changes, because `go test ./...` alone does not refresh that binary.
 
 ## Code style and conventions
 

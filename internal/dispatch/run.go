@@ -69,10 +69,10 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 		return 127
 	}
 
-	childArgs := append([]string{}, parsed.passThroughFlags...)
+	childArgs := parsed.globals.renderArgs()
 	childArgs = append(childArgs, parsed.subcommandArgs...)
 	cmd := exec.Command(path, childArgs...)
-	cmd.Env = withPerfEnv(env, parsed.perf)
+	cmd.Env = withPerfEnv(env, parsed.globals.Perf)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -131,12 +131,12 @@ func auditAliasArgs(parsed parseResult) []string {
 	aliasArgs := append([]string{}, parsed.subcommandArgs[1:]...)
 	for _, arg := range aliasArgs {
 		if arg == "-h" || arg == "--help" {
-			childArgs := append([]string{}, parsed.passThroughFlags...)
+			childArgs := parsed.globals.renderArgs()
 			childArgs = append(childArgs, "--help", "evidence-coverage")
 			return childArgs
 		}
 	}
-	childArgs := append([]string{}, parsed.passThroughFlags...)
+	childArgs := parsed.globals.renderArgs()
 	childArgs = append(childArgs, "evidence-coverage")
 	childArgs = append(childArgs, aliasArgs...)
 	return childArgs
@@ -228,10 +228,11 @@ type fsTxJournal struct {
 }
 
 type busfileCommand struct {
-	File string
-	Line int
-	Raw  string
-	Argv []string
+	File    string
+	Line    int
+	Raw     string
+	Argv    []string
+	Globals globalFlagState
 }
 
 type busfileError struct {
@@ -239,6 +240,180 @@ type busfileError struct {
 	Line     int
 	Message  string
 	ExitCode int
+}
+
+// globalFlagState captures dispatcher-global flag state in structured form.
+// Used by: parseGlobalFlags, busfile sticky directive parsing, child argv rendering.
+type globalFlagState struct {
+	Quiet          bool
+	QuietSet       bool
+	ColorMode      string
+	ColorModeSet   bool
+	Perf           bool
+	PerfSet        bool
+	Verbosity      int
+	VerbositySet   bool
+	Chdir          string
+	ChdirSet       bool
+	ChdirTouched   bool
+	Output         string
+	OutputSet      bool
+	OutputTouched  bool
+	Format         string
+	FormatSet      bool
+	FormatTouched  bool
+}
+
+// applyToken mutates a global flag state from one parsed dispatcher global flag.
+// Used by: parseGlobalFlags while normalizing CLI and busfile directive input.
+func (s *globalFlagState) applyToken(flag string, value string) error {
+	switch flag {
+	case "-q", "--quiet":
+		s.Quiet = true
+		s.QuietSet = true
+	case "--no-quiet":
+		s.Quiet = false
+		s.QuietSet = true
+	case "--no-color":
+		s.ColorMode = "never"
+		s.ColorModeSet = true
+	case "--color":
+		if value == "" {
+			return fmt.Errorf("missing value for --color")
+		}
+		s.ColorMode = value
+		s.ColorModeSet = true
+	case "--no-format":
+		s.Format = ""
+		s.FormatSet = false
+		s.FormatTouched = true
+	case "--format", "-f":
+		if value == "" {
+			return fmt.Errorf("missing value for %s", flag)
+		}
+		s.Format = value
+		s.FormatSet = true
+		s.FormatTouched = true
+	case "--no-chdir":
+		s.Chdir = ""
+		s.ChdirSet = false
+		s.ChdirTouched = true
+	case "--chdir", "-C":
+		if value == "" {
+			return fmt.Errorf("missing value for %s", flag)
+		}
+		s.Chdir = value
+		s.ChdirSet = true
+		s.ChdirTouched = true
+	case "--no-output":
+		s.Output = ""
+		s.OutputSet = false
+		s.OutputTouched = true
+	case "--output", "-o":
+		if value == "" {
+			return fmt.Errorf("missing value for %s", flag)
+		}
+		s.Output = value
+		s.OutputSet = true
+		s.OutputTouched = true
+	case "--perf":
+		s.Perf = true
+		s.PerfSet = true
+	case "--no-perf":
+		s.Perf = false
+		s.PerfSet = true
+	case "-v", "--verbose":
+		s.Verbosity++
+		s.VerbositySet = true
+	case "--no-verbose":
+		s.Verbosity = 0
+		s.VerbositySet = true
+	default:
+		return fmt.Errorf("unknown flag %s", flag)
+	}
+	return nil
+}
+
+// renderArgs converts structured dispatcher-global state back into deterministic child argv.
+// Used by: Run and busfile execution before invoking bus-* child commands.
+func (s globalFlagState) renderArgs() []string {
+	args := make([]string, 0, 8+s.Verbosity)
+	if s.Quiet {
+		args = append(args, "--quiet")
+	}
+	if s.ColorModeSet {
+		if s.ColorMode == "never" {
+			args = append(args, "--no-color")
+		} else {
+			args = append(args, "--color", s.ColorMode)
+		}
+	}
+	for i := 0; i < s.Verbosity; i++ {
+		args = append(args, "-v")
+	}
+	if s.ChdirSet {
+		args = append(args, "--chdir", s.Chdir)
+	}
+	if s.OutputSet {
+		args = append(args, "--output", s.Output)
+	}
+	if s.FormatSet {
+		args = append(args, "--format", s.Format)
+	}
+	return args
+}
+
+// isZero reports whether the state has any active sticky globals.
+// Used by: busfile directive detection.
+func (s globalFlagState) isZero() bool {
+	return !s.Quiet &&
+		!s.QuietSet &&
+		!s.ColorModeSet &&
+		!s.Perf &&
+		!s.PerfSet &&
+		s.Verbosity == 0 &&
+		!s.VerbositySet &&
+		!s.ChdirTouched &&
+		!s.OutputTouched &&
+		!s.FormatTouched
+}
+
+// merge overlays a later global state onto an earlier sticky state.
+// Used by: collectBusfileCommands when applying directive lines in order.
+func (s globalFlagState) merge(overlay globalFlagState) globalFlagState {
+	out := s
+	if overlay.QuietSet {
+		out.Quiet = overlay.Quiet
+		out.QuietSet = true
+	}
+	if overlay.ColorModeSet {
+		out.ColorMode = overlay.ColorMode
+		out.ColorModeSet = true
+	}
+	if overlay.PerfSet {
+		out.Perf = overlay.Perf
+		out.PerfSet = true
+	}
+	if overlay.VerbositySet {
+		out.Verbosity = overlay.Verbosity
+		out.VerbositySet = true
+	}
+	if overlay.ChdirTouched {
+		out.Chdir = overlay.Chdir
+		out.ChdirSet = overlay.ChdirSet
+		out.ChdirTouched = true
+	}
+	if overlay.OutputTouched {
+		out.Output = overlay.Output
+		out.OutputSet = overlay.OutputSet
+		out.OutputTouched = true
+	}
+	if overlay.FormatTouched {
+		out.Format = overlay.Format
+		out.FormatSet = overlay.FormatSet
+		out.FormatTouched = true
+	}
+	return out
 }
 
 func (e busfileError) Error() string {
@@ -552,8 +727,10 @@ func executeBusfileCommands(commands []busfileCommand, opts busfileOptions, env 
 		if opts.trace {
 			fmt.Fprintf(stdout, "%s:%d: bus %s\n", command.File, command.Line, strings.Join(command.Argv, " "))
 		}
-		commandEnv := withBusfileEnv(baseEnv, command.File, command.Line, "")
+		commandEnv := withPerfEnv(withBusfileEnv(baseEnv, command.File, command.Line, ""), command.Globals.Perf)
+		start := time.Now()
 		code, runErr := executor.Execute(command, commandEnv, stdin, stdout, stderr)
+		logBusfileCommandDuration(stderr, command, time.Since(start))
 		if runErr != nil {
 			fmt.Fprintf(stderr, "%s:%d: %v\n", command.File, command.Line, runErr)
 			return code
@@ -648,8 +825,10 @@ func executeFSUnit(commands []busfileCommand, opts busfileOptions, env []string,
 		if opts.trace {
 			fmt.Fprintf(stdout, "%s:%d: bus %s\n", command.File, command.Line, strings.Join(command.Argv, " "))
 		}
-		commandEnv := withBusfileEnv(baseEnv, command.File, command.Line, "fs")
+		commandEnv := withPerfEnv(withBusfileEnv(baseEnv, command.File, command.Line, "fs"), command.Globals.Perf)
+		start := time.Now()
 		code, runErr := runBusfileCommandFS(command, commandEnv, stdin, stdout, stderr, fsOverlay)
+		logBusfileCommandDuration(stderr, command, time.Since(start))
 		if runErr != nil {
 			_ = fsOverlay.Rollback()
 			_ = os.RemoveAll(txRoot)
@@ -1280,6 +1459,13 @@ func isCurrencyCode(value string) bool {
 }
 
 func collectBusfileCommands(path string, stack map[string]bool, commands *[]busfileCommand) error {
+	sticky := globalFlagState{}
+	return collectBusfileCommandsWithState(path, stack, commands, &sticky)
+}
+
+// collectBusfileCommandsWithState parses a busfile and carries sticky global directives forward.
+// Used by: collectBusfileCommands for root and included busfiles.
+func collectBusfileCommandsWithState(path string, stack map[string]bool, commands *[]busfileCommand, sticky *globalFlagState) error {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		absPath = path
@@ -1336,7 +1522,7 @@ func collectBusfileCommands(path string, stack map[string]bool, commands *[]busf
 			if !filepath.IsAbs(includePath) {
 				includePath = filepath.Join(filepath.Dir(path), includePath)
 			}
-			if err := collectBusfileCommands(includePath, stack, commands); err != nil {
+			if err := collectBusfileCommandsWithState(includePath, stack, commands, sticky); err != nil {
 				return err
 			}
 			continue
@@ -1349,11 +1535,33 @@ func collectBusfileCommands(path string, stack map[string]bool, commands *[]busf
 				ExitCode: 65,
 			}
 		}
+		parsed, err := parseGlobalFlags(argv)
+		if err != nil {
+			return busfileError{
+				File:     path,
+				Line:     logicalStart,
+				Message:  "syntax error: " + err.Error(),
+				ExitCode: 65,
+			}
+		}
+		if parsed.help || parsed.version {
+			return busfileError{
+				File:     path,
+				Line:     logicalStart,
+				Message:  "syntax error: busfile global directive cannot use --help or --version",
+				ExitCode: 65,
+			}
+		}
+		if parsed.subcommand == "" && !parsed.globals.isZero() {
+			*sticky = sticky.merge(parsed.globals)
+			continue
+		}
 		*commands = append(*commands, busfileCommand{
-			File: path,
-			Line: logicalStart,
-			Raw:  trimmed,
-			Argv: argv,
+			File:    path,
+			Line:    logicalStart,
+			Raw:     trimmed,
+			Argv:    argv,
+			Globals: *sticky,
 		})
 	}
 	if err := scanner.Err(); err != nil {
@@ -1478,7 +1686,9 @@ func runBusfileCommand(command busfileCommand, env []string, stdin io.Reader, st
 		}
 	}
 
-	cmd := exec.Command(path, command.Argv[1:]...)
+	childArgs := command.Globals.renderArgs()
+	childArgs = append(childArgs, command.Argv[1:]...)
+	cmd := exec.Command(path, childArgs...)
 	cmd.Env = env
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
@@ -1784,13 +1994,11 @@ func isValidScope(value string) bool {
 }
 
 type parseResult struct {
-	help             bool
-	version          bool
-	perf             bool
-	verbosity        int
-	subcommand       string
-	passThroughFlags []string
-	subcommandArgs   []string
+	help           bool
+	version        bool
+	globals        globalFlagState
+	subcommand     string
+	subcommandArgs []string
 }
 
 func parseGlobalFlags(args []string) (parseResult, error) {
@@ -1812,27 +2020,31 @@ func parseGlobalFlags(args []string) (parseResult, error) {
 		case arg == "-V" || arg == "--version":
 			parsed.version = true
 			return parsed, nil
-		case arg == "-q" || arg == "--quiet" || arg == "--no-color":
-			parsed.passThroughFlags = append(parsed.passThroughFlags, arg)
-		case arg == "--perf":
-			parsed.perf = true
-		case arg == "-v" || arg == "--verbose":
-			parsed.passThroughFlags = append(parsed.passThroughFlags, arg)
-			parsed.verbosity++
+		case arg == "--no-quiet" || arg == "--no-perf" || arg == "--no-verbose" || arg == "--no-chdir" || arg == "--no-output" || arg == "--no-format" || arg == "-q" || arg == "--quiet" || arg == "--no-color" || arg == "--perf" || arg == "-v" || arg == "--verbose":
+			if err := parsed.globals.applyToken(arg, ""); err != nil {
+				return parsed, err
+			}
 		case strings.HasPrefix(arg, "-") && len(arg) > 2 && strings.Trim(arg[1:], "v") == "":
 			for range len(arg[1:]) {
-				parsed.passThroughFlags = append(parsed.passThroughFlags, "-v")
-				parsed.verbosity++
+				if err := parsed.globals.applyToken("-v", ""); err != nil {
+					return parsed, err
+				}
 			}
 		case strings.HasPrefix(arg, "--color="):
-			parsed.passThroughFlags = append(parsed.passThroughFlags, arg)
+			if err := parsed.globals.applyToken("--color", strings.TrimPrefix(arg, "--color=")); err != nil {
+				return parsed, err
+			}
 		case strings.HasPrefix(arg, "--format="):
-			parsed.passThroughFlags = append(parsed.passThroughFlags, arg)
+			if err := parsed.globals.applyToken("--format", strings.TrimPrefix(arg, "--format=")); err != nil {
+				return parsed, err
+			}
 		case arg == "-C" || arg == "--chdir" || arg == "-o" || arg == "--output" || arg == "-f" || arg == "--format" || arg == "--color":
 			if i+1 >= len(args) {
 				return parsed, fmt.Errorf("missing value for %s", arg)
 			}
-			parsed.passThroughFlags = append(parsed.passThroughFlags, arg, args[i+1])
+			if err := parsed.globals.applyToken(arg, args[i+1]); err != nil {
+				return parsed, err
+			}
 			i++
 		case strings.HasPrefix(arg, "-"):
 			return parsed, fmt.Errorf("unknown flag %s", arg)
@@ -1867,11 +2079,17 @@ func writeHelp(env []string, stdout io.Writer) {
 	fmt.Fprintln(stdout, "  -h, --help")
 	fmt.Fprintln(stdout, "  -V, --version")
 	fmt.Fprintln(stdout, "  -v, --verbose")
+	fmt.Fprintln(stdout, "  --no-verbose")
 	fmt.Fprintln(stdout, "  --perf")
+	fmt.Fprintln(stdout, "  --no-perf")
 	fmt.Fprintln(stdout, "  -q, --quiet")
+	fmt.Fprintln(stdout, "  --no-quiet")
 	fmt.Fprintln(stdout, "  -C, --chdir <dir>")
+	fmt.Fprintln(stdout, "  --no-chdir")
 	fmt.Fprintln(stdout, "  -o, --output <file>")
+	fmt.Fprintln(stdout, "  --no-output")
 	fmt.Fprintln(stdout, "  -f, --format <format>")
+	fmt.Fprintln(stdout, "  --no-format")
 	fmt.Fprintln(stdout, "  --color <auto|always|never>")
 	fmt.Fprintln(stdout, "  --no-color")
 	fmt.Fprintln(stdout, "  --")
@@ -1913,9 +2131,9 @@ func withPerfEnv(env []string, perf bool) []string {
 func logCommandDuration(stderr io.Writer, parsed parseResult, d time.Duration) {
 	level := ""
 	switch {
-	case parsed.perf:
+	case parsed.globals.Perf:
 		level = "INFO"
-	case parsed.verbosity > 0:
+	case parsed.globals.Verbosity > 0:
 		level = "DEBUG"
 	default:
 		return
@@ -1928,7 +2146,33 @@ func logCommandDuration(stderr io.Writer, parsed parseResult, d time.Duration) {
 			break
 		}
 	}
-	fmt.Fprintf(stderr, "%s %s %s %.3f\n", level, moduleName, op, d.Seconds())
+	fmt.Fprintf(stderr, "%s perf %s %s %.3f\n", level, moduleName, op, d.Seconds())
+}
+
+// logBusfileCommandDuration emits one deterministic timing line for a completed busfile command.
+// Used by: executeBusfileCommands and executeFSUnit after each dispatched busfile command.
+func logBusfileCommandDuration(stderr io.Writer, command busfileCommand, d time.Duration) {
+	level := ""
+	switch {
+	case command.Globals.Perf:
+		level = "INFO"
+	case command.Globals.Verbosity > 0:
+		level = "DEBUG"
+	default:
+		return
+	}
+	if len(command.Argv) == 0 {
+		return
+	}
+	moduleName := "bus-" + command.Argv[0]
+	op := command.Argv[0]
+	for _, arg := range command.Argv[1:] {
+		if !strings.HasPrefix(arg, "-") && arg != "--" {
+			op = arg
+			break
+		}
+	}
+	fmt.Fprintf(stderr, "%s perf %s %s %.3f\n", level, moduleName, op, d.Seconds())
 }
 
 // Issue: https://github.com/busdk/bus/issues/2 - enumerate bus-* executables on PATH.

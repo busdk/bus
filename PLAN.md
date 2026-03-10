@@ -92,3 +92,4 @@
 - [x] Optimize repeated `txfs.OpenFile` writes on already-materialized paths in `internal/txfs/txfs.go` (steady-state append/create loops). Direction: add a lower-overhead fast path that minimizes repeated path normalization/index mutations and overlay-dir checks when `changeReplace` is already established.
 
 - [x] Add dispatcher-level `--perf` global flag forwarding and help/docs coverage in `bus`, so performance tracing can be enabled consistently for subcommands without breaking existing global-flag behavior, with unit tests and e2e coverage in the same change.
+- [x] Add busfile session-level sticky global-flag directives in `bus` so any dispatcher global flag can be set on its own line and applied to following commands with deterministic override semantics (for example later `--chdir` replaces earlier `--chdir`), including unit tests, focused e2e coverage, and docs updates.

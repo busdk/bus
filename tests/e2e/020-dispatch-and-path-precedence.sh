@@ -10,6 +10,6 @@ diff -u <(printf 'ACCOUNTS:alpha beta\n') "$WS/dispatch.out"
 
 PATH="$TEST_PATH" "$BIN" --perf accounts alpha > "$WS/perf.out" 2> "$WS/perf.err"
 diff -u <(printf 'ACCOUNTS:alpha\n') "$WS/perf.out"
-grep -q '^INFO bus-accounts alpha ' "$WS/perf.err"
+grep -q '^INFO perf bus-accounts alpha ' "$WS/perf.err"
 
 echo "e2e OK"
