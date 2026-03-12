@@ -2146,7 +2146,7 @@ func logCommandDuration(stderr io.Writer, parsed parseResult, d time.Duration) {
 			break
 		}
 	}
-	fmt.Fprintf(stderr, "%s perf %s %s %.3f\n", level, moduleName, op, d.Seconds())
+	fmt.Fprintf(stderr, "%s perf %s %s %s\n", level, moduleName, op, d.String())
 }
 
 // logBusfileCommandDuration emits one deterministic timing line for a completed busfile command.
@@ -2172,7 +2172,7 @@ func logBusfileCommandDuration(stderr io.Writer, command busfileCommand, d time.
 			break
 		}
 	}
-	fmt.Fprintf(stderr, "%s perf %s %s %.3f\n", level, moduleName, op, d.Seconds())
+	fmt.Fprintf(stderr, "%s perf %s %s %s\n", level, moduleName, op, d.String())
 }
 
 // Issue: https://github.com/busdk/bus/issues/2 - enumerate bus-* executables on PATH.
