@@ -196,7 +196,28 @@ test-e2e: $(E2E_STAMP)
 
 $(E2E_STAMP): ./bin/$(BINARY) $(TEST_FILES)
 	mkdir -p $(STAMP_DIR)
-	bash ./tests/e2e.sh
+	@if [ "$${BUS_E2E_VERBOSE:-0}" = "1" ]; then \
+		bash ./tests/e2e.sh; \
+	else \
+		log=$$(mktemp); \
+		if bash ./tests/e2e.sh >"$$log" 2>&1; then \
+			passed=$$(grep -Ec '^PASS([ :]|$$)' "$$log" || true); \
+			skipped=$$(grep -Ec '^SKIP([ :]|$$)' "$$log" || true); \
+			if [ "$$passed" -eq 0 ] && [ "$$skipped" -eq 0 ]; then passed=1; fi; \
+			if [ "$$skipped" -gt 0 ]; then grep -E '^SKIP([ :]|$$)' "$$log"; fi; \
+			printf "e2e OK (%s: passed %s, skipped %s)\n" "$(BINARY)" "$$passed" "$$skipped"; \
+		else \
+			passed=$$(grep -Ec '^PASS([ :]|$$)' "$$log" || true); \
+			skipped=$$(grep -Ec '^SKIP([ :]|$$)' "$$log" || true); \
+			failed=$$(grep -Ec '^FAIL([ :]|$$)' "$$log" || true); \
+			if [ "$$failed" -eq 0 ]; then failed=1; fi; \
+			printf "e2e FAILED (%s: passed %s, skipped %s, failed %s)\n" "$(BINARY)" "$$passed" "$$skipped" "$$failed"; \
+			cat "$$log"; \
+			rm -f "$$log"; \
+			exit 1; \
+		fi; \
+		rm -f "$$log"; \
+	fi
 	touch $(E2E_STAMP)
 
 e2e: test-e2e

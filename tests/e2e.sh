@@ -34,7 +34,7 @@ EXPECTED_SUBJECT_HASH="$(hash_file "$TEST_SUBJECT")"
 
 while IFS= read -r script; do
   assert_subject_unchanged
-  (set -x; bash "$script")
+  (if [[ "${BUS_E2E_VERBOSE:-0}" = "1" ]]; then set -x; fi; bash "$script")
   assert_subject_unchanged
 done < <(find "${ROOT_DIR}/tests/e2e" -maxdepth 1 -type f -name '[0-9][0-9][0-9]-*.sh' | LC_ALL=C sort)
 
