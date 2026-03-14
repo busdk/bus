@@ -1,0 +1,51 @@
+{
+  "name": "language-bus",
+  "displayName": "Bus Language Support",
+  "description": "Syntax highlighting and .bus file associations for BusDK command files.",
+  "version": "0.1.0",
+  "publisher": "busdk",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "homepage": "https://github.com/busdk/bus",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/busdk/bus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/busdk/bus/issues"
+  },
+  "keywords": [
+    "bus",
+    "busdk",
+    "busfile",
+    "accounting",
+    "cli"
+  ],
+  "categories": [
+    "Programming Languages"
+  ],
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "bus",
+        "aliases": [
+          "Bus",
+          "bus"
+        ],
+        "extensions": [
+          ".bus"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "bus",
+        "scopeName": "source.bus",
+        "path": "./syntaxes/bus.tmLanguage.json"
+      }
+    ]
+  }
+}

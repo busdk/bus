@@ -2,6 +2,8 @@
 
 ## Active feature plan
 
+- [x] Add distributable `.bus` language tooling for the `bus` source format end-to-end: define a canonical syntax-highlighting grammar for `.bus` shebang/comments/commands/flags/strings, package and document a VS Code/Cursor-compatible extension plus a downloadable `.vsix` install path for users, add repository/browser fallback classification where appropriate, and land implementation docs, user install docs, and automated verification for the shipped grammar/package metadata in the same change.
+
 - [x] FR57/Task 1: Define and document dispatcher command boundaries for identity and plan features.
   - Implementation: add dispatcher-level command discoverability/usage coverage for `auth` and `plan` command families without adding business logic to `bus`.
   - Documentation: update `README.md` and docs module pages to describe `bus auth ...` and `bus plan ...` delegation model and module split rationale.

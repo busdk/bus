@@ -25,6 +25,8 @@ RUN_BENCHMETA ?= 0
 
 BINARY ?= $(notdir $(abspath $(CURDIR)))
 MODULE_DIR := $(notdir $(abspath $(CURDIR)))
+VSCODE_EXTENSION_DIR ?= editors/vscode-bus-language
+VSIX_OUT ?=
 DOCKER ?= docker
 DOCKER_TEST_IMAGE ?= $(MODULE_DIR)-test
 ENABLE_WASM ?= $(if $(wildcard cmd/$(BINARY)-wasm/main.go),1,0)
@@ -102,7 +104,7 @@ FUZZ_STAMP := $(STAMP_DIR)/fuzz.stamp
 BENCH_STAMP := $(STAMP_DIR)/bench.stamp
 E2E_STAMP := $(STAMP_DIR)/e2e.stamp
 
-.PHONY: all tidy build build-debug build-wasm test color-test test-fuzz test-bench color-bench bench test-docker test-e2e e2e fmt lint check benchmeta install uninstall clean
+.PHONY: all tidy build build-debug build-wasm test color-test test-fuzz test-bench color-bench bench test-docker test-e2e e2e fmt lint check benchmeta package-vscode-extension install uninstall clean
 
 all: build
 
@@ -229,6 +231,13 @@ else
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) run $(BENCHMETA_CMD_PKG) --format text
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) run $(BENCHMETA_CMD_PKG) --format json
 endif
+
+package-vscode-extension: $(shell find $(VSCODE_EXTENSION_DIR) -type f | sort) scripts/package_vscode_bus_language.py
+	@if [ -n "$(VSIX_OUT)" ]; then \
+		python3 ./scripts/package_vscode_bus_language.py --output "$(VSIX_OUT)"; \
+	else \
+		python3 ./scripts/package_vscode_bus_language.py; \
+	fi
 
 check: fmt lint test test-e2e
 ifeq ($(RUN_FUZZ),1)

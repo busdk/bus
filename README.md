@@ -102,6 +102,21 @@ Reset directives are supported for sticky state: `--no-perf`, `--no-quiet`,
 `--no-verbose`, `--no-chdir`, `--no-output`, and `--no-format`. Color already
 uses `--color ...` and `--no-color`.
 
+## Editor support for `.bus`
+
+The repository ships a VS Code compatible language package for `.bus` files
+under `editors/vscode-bus-language/`. It provides syntax highlighting and file
+association for BusDK command files in editors such as VS Code and Cursor.
+
+To package the installable `.vsix` artifact from source, run:
+
+```sh
+make package-vscode-extension
+```
+
+The command writes a versioned `.vsix` file into `./bin/`. That artifact is the
+intended release/downloadable package for users.
+
 ## Development
 
 Build:

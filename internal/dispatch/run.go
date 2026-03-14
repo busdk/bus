@@ -245,23 +245,23 @@ type busfileError struct {
 // globalFlagState captures dispatcher-global flag state in structured form.
 // Used by: parseGlobalFlags, busfile sticky directive parsing, child argv rendering.
 type globalFlagState struct {
-	Quiet          bool
-	QuietSet       bool
-	ColorMode      string
-	ColorModeSet   bool
-	Perf           bool
-	PerfSet        bool
-	Verbosity      int
-	VerbositySet   bool
-	Chdir          string
-	ChdirSet       bool
-	ChdirTouched   bool
-	Output         string
-	OutputSet      bool
-	OutputTouched  bool
-	Format         string
-	FormatSet      bool
-	FormatTouched  bool
+	Quiet         bool
+	QuietSet      bool
+	ColorMode     string
+	ColorModeSet  bool
+	Perf          bool
+	PerfSet       bool
+	Verbosity     int
+	VerbositySet  bool
+	Chdir         string
+	ChdirSet      bool
+	ChdirTouched  bool
+	Output        string
+	OutputSet     bool
+	OutputTouched bool
+	Format        string
+	FormatSet     bool
+	FormatTouched bool
 }
 
 // applyToken mutates a global flag state from one parsed dispatcher global flag.
