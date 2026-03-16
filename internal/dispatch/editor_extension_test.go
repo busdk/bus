@@ -94,6 +94,19 @@ func TestVSCodeBusLanguagePackagerProducesVSIX(t *testing.T) {
 	}
 }
 
+func TestVSCodeBusLanguageGrammarCoversBusfileFixtures(t *testing.T) {
+	t.Parallel()
+
+	root := dispatcherModuleRoot(t)
+	grammarPath := filepath.Join(root, "editors", "vscode-bus-language", "syntaxes", "bus.tmLanguage.json")
+	cmd := exec.Command("python3", filepath.Join(root, "scripts", "check_vscode_bus_language_grammar.py"), grammarPath)
+	cmd.Dir = root
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("check grammar fixtures: %v\n%s", err, output)
+	}
+}
+
 func dispatcherModuleRoot(t *testing.T) string {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)

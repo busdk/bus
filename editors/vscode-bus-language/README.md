@@ -11,10 +11,13 @@ VSCodium, and Windsurf.
 - shebang lines such as `#!/usr/bin/env bus`
 - comment lines beginning with `#`
 - `.bus` include lines
+- sticky directive lines that begin with dispatcher-global flags
 - command targets and first subcommands
 - long and short flags
+- `key=value` assignments such as `--set field=value` or `1910=100.00`
 - quoted strings
 - ISO-style dates and datetimes
+- trailing line-continuation backslashes
 
 ## Installation
 

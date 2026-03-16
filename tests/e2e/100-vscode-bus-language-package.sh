@@ -9,8 +9,11 @@ test -s "$vsix_path"
 
 python3 - "$vsix_path" <<'PY'
 import json
+import pathlib
 import sys
+import tempfile
 import zipfile
+import subprocess
 
 vsix_path = sys.argv[1]
 required_entries = {
@@ -34,6 +37,13 @@ with zipfile.ZipFile(vsix_path) as archive:
     grammar = json.loads(archive.read("extension/syntaxes/bus.tmLanguage.json"))
     if grammar.get("scopeName") != "source.bus":
         raise SystemExit("unexpected grammar scopeName")
+    with tempfile.TemporaryDirectory() as tmp:
+        grammar_path = pathlib.Path(tmp) / "bus.tmLanguage.json"
+        grammar_path.write_text(json.dumps(grammar), encoding="utf-8")
+        subprocess.run(
+            ["python3", str(pathlib.Path("scripts/check_vscode_bus_language_grammar.py")), str(grammar_path)],
+            check=True,
+        )
 PY
 
 echo "e2e OK"

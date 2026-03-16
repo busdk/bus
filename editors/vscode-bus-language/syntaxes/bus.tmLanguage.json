@@ -13,6 +13,9 @@
       "include": "#include"
     },
     {
+      "include": "#directiveLine"
+    },
+    {
       "include": "#commandTarget"
     },
     {
@@ -25,6 +28,9 @@
       "include": "#shortFlag"
     },
     {
+      "include": "#assignment"
+    },
+    {
       "include": "#doubleQuotedString"
     },
     {
@@ -35,6 +41,9 @@
     },
     {
       "include": "#number"
+    },
+    {
+      "include": "#continuation"
     }
   ],
   "repository": {
@@ -54,6 +63,37 @@
           "name": "entity.name.section.include.bus"
         }
       }
+    },
+    "directiveLine": {
+      "name": "meta.directive.bus",
+      "begin": "^\\s*(?=--)",
+      "end": "$",
+      "patterns": [
+        {
+          "include": "#longFlag"
+        },
+        {
+          "include": "#shortFlag"
+        },
+        {
+          "include": "#assignment"
+        },
+        {
+          "include": "#doubleQuotedString"
+        },
+        {
+          "include": "#singleQuotedString"
+        },
+        {
+          "include": "#datetime"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "include": "#continuation"
+        }
+      ]
     },
     "commandTarget": {
       "match": "^\\s*([a-z][a-z0-9-]*)(?=\\s|$)",
@@ -79,6 +119,17 @@
       "name": "keyword.other.flag.short.bus",
       "match": "(?<![A-Za-z0-9_-])-[A-Za-z0-9]+\\b"
     },
+    "assignment": {
+      "match": "(?<![A-Za-z0-9_.-])([A-Za-z0-9_][A-Za-z0-9_.-]*)(=)",
+      "captures": {
+        "1": {
+          "name": "variable.parameter.assignment.bus"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.bus"
+        }
+      }
+    },
     "doubleQuotedString": {
       "name": "string.quoted.double.bus",
       "begin": "\"",
@@ -102,6 +153,10 @@
     "number": {
       "name": "constant.numeric.decimal.bus",
       "match": "(?<![A-Za-z0-9_.-])-?\\d+(?:\\.\\d+)?\\b"
+    },
+    "continuation": {
+      "name": "punctuation.separator.continuation.bus",
+      "match": "\\\\$"
     }
   }
 }

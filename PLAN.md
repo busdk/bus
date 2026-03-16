@@ -2,6 +2,14 @@
 
 ## Active feature plan
 
+- [x] Tighten the shipped `.bus` TextMate grammar end-to-end: extend the canonical VS Code-compatible grammar so it highlights sticky directive lines, `key=value` assignments, and trailing line-continuation backslashes in addition to the existing shebang/comment/include/command/flag/string/date coverage, add source-grammar and packaged-`.vsix` validation tests for representative `.bus` fixtures, and update README plus editor-support docs/SDD wording in the same change.
+
+- [ ] Add maintainer-ready distribution coverage for the shipped VS Code-compatible `.bus` extension end-to-end: document and automate the supported release surfaces (`.vsix` release asset first, Open VSX next), keep install docs aligned for VS Code/Cursor/VSCodium-style editors, and add verification that published package metadata remains compatible with those distribution paths.
+
+- [ ] Add a parser-backed premium highlighting layer for `.bus` end-to-end with Tree-sitter as the next editor-support tier: define a Tree-sitter grammar and highlight queries from the same BusDK busfile syntax contract, document the supported Neovim/Emacs integration path, and land parser/query tests plus docs in the same change.
+
+- [ ] Add semantic-token/LSP support for `.bus` end-to-end after the parser-backed layer stabilizes: expose standard semantic token classes for commands, flags, assignments, strings, dates, and numbers, document editor integration expectations, and land deterministic tests and docs in the same change.
+
 - [x] Add distributable `.bus` language tooling for the `bus` source format end-to-end: define a canonical syntax-highlighting grammar for `.bus` shebang/comments/commands/flags/strings, package and document a VS Code/Cursor-compatible extension plus a downloadable `.vsix` install path for users, add repository/browser fallback classification where appropriate, and land implementation docs, user install docs, and automated verification for the shipped grammar/package metadata in the same change.
 
 - [x] FR57/Task 1: Define and document dispatcher command boundaries for identity and plan features.

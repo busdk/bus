@@ -106,7 +106,9 @@ uses `--color ...` and `--no-color`.
 
 The repository ships a VS Code compatible language package for `.bus` files
 under `editors/vscode-bus-language/`. It provides syntax highlighting and file
-association for BusDK command files in editors such as VS Code and Cursor.
+association for BusDK command files in editors such as VS Code and Cursor,
+including sticky directive lines, assignments, and line continuations that are
+common in real busfiles.
 
 To package the installable `.vsix` artifact from source, run:
 
