@@ -31,6 +31,7 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 ## Invocation and behavior
 
 - **Pattern:** `bus <command> [args...]`. This module is the dispatcher; it does not implement domain subcommands.
+- **Installer/package-manager boundary:** bootstrap installer and package-manager UX may be exposed through `bus ...` only as delegated command families executed via `bus-update`; do not embed installer, package download, or package database logic into the `bus` dispatcher itself.
 - **Dispatch:** Resolve the executable with `exec.LookPath("bus-" + name)` only, then exec with args unchanged, inheriting stdin, stdout, stderr, and environment.
 - **Busfile dispatch selection:** in `.bus` execution mode, only use in-process runners that are explicitly registered inside this open-source `bus` module; otherwise use `bus-<target>` shell lookup only when `bus.busfile.dispatch.shell_lookup_enabled=true`.
 - **FS transactions:** `provider=fs` is valid only when all busfile targets have in-process transaction-capable runners (Tx runners); otherwise fallback/error rules apply.

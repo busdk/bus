@@ -2,6 +2,8 @@
 
 ## Active feature plan
 
+- [ ] Add dispatcher-facing bootstrap/package-manager UX coverage for BusDK installer flows end-to-end: define and document the supported user-facing `bus ...` command surface for bootstrap-installed package management while keeping `bus` a pure dispatcher to `bus-update`, keep missing-subcommand/help/exit-code contracts deterministic when the package-manager module is present or absent on both Windows (`.exe`) and non-Windows platforms, update README and docs/SDD wording in the same change, add unit tests for discoverability and diagnostics around the delegated install/update command family, and add e2e coverage with fake `bus-update` binaries that proves argument/exit-code pass-through without embedding package-manager logic in `bus`.
+
 - [x] Tighten the shipped `.bus` TextMate grammar end-to-end: extend the canonical VS Code-compatible grammar so it highlights sticky directive lines, `key=value` assignments, and trailing line-continuation backslashes in addition to the existing shebang/comment/include/command/flag/string/date coverage, add source-grammar and packaged-`.vsix` validation tests for representative `.bus` fixtures, and update README plus editor-support docs/SDD wording in the same change.
 
 - [ ] Add maintainer-ready distribution coverage for the shipped VS Code-compatible `.bus` extension end-to-end: document and automate the supported release surfaces (`.vsix` release asset first, Open VSX next), keep install docs aligned for VS Code/Cursor/VSCodium-style editors, and add verification that published package metadata remains compatible with those distribution paths.
