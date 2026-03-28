@@ -19,6 +19,9 @@ vsix_path = sys.argv[1]
 required_entries = {
     "[Content_Types].xml",
     "extension.vsixmanifest",
+    "extension/bus_language_core.js",
+    "extension/extension.js",
+    "extension/language-server.js",
     "extension/package.json",
     "extension/README.md",
     "extension/LICENSE.md",

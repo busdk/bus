@@ -104,7 +104,7 @@ FUZZ_STAMP := $(STAMP_DIR)/fuzz.stamp
 BENCH_STAMP := $(STAMP_DIR)/bench.stamp
 E2E_STAMP := $(STAMP_DIR)/e2e.stamp
 
-.PHONY: all tidy build build-debug build-wasm test color-test test-fuzz test-bench color-bench bench test-docker test-e2e e2e fmt lint check benchmeta package-vscode-extension install uninstall clean
+.PHONY: all tidy build build-debug build-wasm test color-test test-fuzz test-bench color-bench bench test-docker test-e2e e2e fmt lint check benchmeta package-vscode-extension check-vscode-extension-release check-tree-sitter-bus-language check-bus-language-server install uninstall clean
 
 all: build
 
@@ -238,6 +238,15 @@ package-vscode-extension: $(shell find $(VSCODE_EXTENSION_DIR) -type f | sort) s
 	else \
 		python3 ./scripts/package_vscode_bus_language.py; \
 	fi
+
+check-vscode-extension-release: $(shell find $(VSCODE_EXTENSION_DIR) -type f | sort) scripts/check_vscode_bus_language_release.py
+	python3 ./scripts/check_vscode_bus_language_release.py
+
+check-tree-sitter-bus-language: $(shell find editors/tree-sitter-bus -type f | sort) scripts/check_tree_sitter_bus_language.js
+	node ./scripts/check_tree_sitter_bus_language.js
+
+check-bus-language-server: $(shell find $(VSCODE_EXTENSION_DIR) -type f | sort) scripts/check_bus_language_server.py
+	python3 ./scripts/check_bus_language_server.py
 
 check: fmt lint test test-e2e
 ifeq ($(RUN_FUZZ),1)

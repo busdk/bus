@@ -42,6 +42,17 @@ bus accounts summary --month=2026-01
 This resolves and runs `bus-accounts` from `PATH`, passing through arguments,
 stdin, stdout, stderr, and environment unchanged.
 
+Bootstrap and managed-package flows use the same delegation model:
+
+```sh
+bus update --workspace /srv/busdk --dry-run
+bus update package install --module bus-ledger
+```
+
+These commands are still pure dispatcher calls. `bus` resolves and runs
+`bus-update` from `PATH`, and all installer/package-manager behavior remains in
+that module rather than in the dispatcher.
+
 Special audit alias:
 
 ```sh
@@ -104,11 +115,16 @@ uses `--color ...` and `--no-color`.
 
 ## Editor support for `.bus`
 
-The repository ships a VS Code compatible language package for `.bus` files
-under `editors/vscode-bus-language/`. It provides syntax highlighting and file
-association for BusDK command files in editors such as VS Code and Cursor,
-including sticky directive lines, assignments, and line continuations that are
-common in real busfiles.
+The repository ships three editor-tooling layers for `.bus` files:
+
+- a VS Code compatible extension under `editors/vscode-bus-language/`
+- a Tree-sitter grammar under `editors/tree-sitter-bus/`
+- a lightweight stdio language server at `editors/vscode-bus-language/language-server.js`
+
+The VS Code-compatible package provides syntax highlighting, file association,
+and semantic tokens for BusDK command files in editors such as VS Code and
+Cursor, including sticky directive lines, assignments, and line continuations
+that are common in real busfiles.
 
 To package the installable `.vsix` artifact from source, run:
 
@@ -117,7 +133,31 @@ make package-vscode-extension
 ```
 
 The command writes a versioned `.vsix` file into `./bin/`. That artifact is the
-intended release/downloadable package for users.
+intended release/downloadable package for users. Maintainers can also validate
+the supported release surfaces and Open VSX-compatible metadata with:
+
+```sh
+make check-vscode-extension-release
+```
+
+The release surface contract is:
+
+- `.vsix` release asset first for VS Code, Cursor, Windsurf, and other editors
+  that accept local VS Code extension packages
+- Open VSX-compatible metadata under `busdk.language-bus` / `busdk/language-bus`
+  for VSCodium-style distribution paths
+
+For parser-backed highlighting in editors that use Tree-sitter, use the grammar
+and highlight query in `editors/tree-sitter-bus/`.
+
+For editors that can talk to an stdio language server, run:
+
+```sh
+node editors/vscode-bus-language/language-server.js --stdio
+```
+
+That server exposes semantic tokens for command targets, flags, assignments,
+strings, dates, and numbers by standard LSP token classes.
 
 ## Development
 

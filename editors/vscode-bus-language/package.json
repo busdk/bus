@@ -23,6 +23,10 @@
   "categories": [
     "Programming Languages"
   ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:bus"
+  ],
   "engines": {
     "vscode": "^1.74.0"
   },

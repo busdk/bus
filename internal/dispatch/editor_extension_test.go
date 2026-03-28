@@ -76,6 +76,9 @@ func TestVSCodeBusLanguagePackagerProducesVSIX(t *testing.T) {
 	requiredEntries := map[string]bool{
 		"[Content_Types].xml":                    false,
 		"extension.vsixmanifest":                 false,
+		"extension/bus_language_core.js":         false,
+		"extension/extension.js":                 false,
+		"extension/language-server.js":           false,
 		"extension/package.json":                 false,
 		"extension/README.md":                    false,
 		"extension/LICENSE.md":                   false,
@@ -104,6 +107,65 @@ func TestVSCodeBusLanguageGrammarCoversBusfileFixtures(t *testing.T) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("check grammar fixtures: %v\n%s", err, output)
+	}
+}
+
+func TestVSCodeBusLanguageReleaseSurfaceReport(t *testing.T) {
+	t.Parallel()
+
+	root := dispatcherModuleRoot(t)
+	cmd := exec.Command("python3", filepath.Join(root, "scripts", "check_vscode_bus_language_release.py"), "--format", "json")
+	cmd.Dir = root
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("check release surface: %v\n%s", err, output)
+	}
+	var report struct {
+		ExtensionID      string   `json:"extension_id"`
+		OpenVSXSlug      string   `json:"openvsx_slug"`
+		Version          string   `json:"version"`
+		VSIXPath         string   `json:"vsix_path"`
+		VSIXRelease      string   `json:"vsix_release_asset"`
+		SupportedEditors []string `json:"supported_editors"`
+	}
+	if err := json.Unmarshal(output, &report); err != nil {
+		t.Fatalf("parse release report: %v\n%s", err, output)
+	}
+	if report.ExtensionID != "busdk.language-bus" {
+		t.Fatalf("unexpected extension id %q", report.ExtensionID)
+	}
+	if report.OpenVSXSlug != "busdk/language-bus" {
+		t.Fatalf("unexpected Open VSX slug %q", report.OpenVSXSlug)
+	}
+	if report.VSIXPath == "" || report.VSIXRelease == "" || report.Version == "" {
+		t.Fatalf("unexpected empty release fields: %+v", report)
+	}
+	if len(report.SupportedEditors) == 0 {
+		t.Fatalf("expected supported editors in report: %+v", report)
+	}
+}
+
+func TestTreeSitterBusLanguageContract(t *testing.T) {
+	t.Parallel()
+
+	root := dispatcherModuleRoot(t)
+	cmd := exec.Command("node", filepath.Join(root, "scripts", "check_tree_sitter_bus_language.js"))
+	cmd.Dir = root
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("check tree-sitter contract: %v\n%s", err, output)
+	}
+}
+
+func TestBusLanguageServerSemanticTokens(t *testing.T) {
+	t.Parallel()
+
+	root := dispatcherModuleRoot(t)
+	cmd := exec.Command("python3", filepath.Join(root, "scripts", "check_bus_language_server.py"))
+	cmd.Dir = root
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("check language server: %v\n%s", err, output)
 	}
 }
 

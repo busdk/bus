@@ -248,6 +248,59 @@ func TestRunDispatchesAndPassesArgs(t *testing.T) {
 	}
 }
 
+func TestRunUpdatePackageDispatchesToBusUpdate(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "update", "UPDATE")
+	env := prependPath(os.Environ(), tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "update", "package", "install", "--module", "bus-ledger"}, env, nil, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "UPDATE:package install --module bus-ledger\n" {
+		t.Fatalf("unexpected delegated args: %q", stdout.String())
+	}
+}
+
+func TestRunMissingUpdateSubcommandMentionsBusUpdate(t *testing.T) {
+	t.Parallel()
+
+	env := setEnv(os.Environ(), "PATH", "")
+
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "update", "package", "install", "--module", "bus-ledger"}, env, nil, io.Discard, &stderr)
+
+	if code != 127 {
+		t.Fatalf("expected exit code 127, got %d", code)
+	}
+	expected := `bus: missing subcommand: update; expected executable named bus-update in PATH`
+	if !strings.Contains(stderr.String(), expected) {
+		t.Fatalf("expected error %q, got %q", expected, stderr.String())
+	}
+}
+
+func TestRunUpdatePackagePassesExitCode(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "update", "UPDATE")
+	env := prependPath(os.Environ(), tempDir)
+	env = setEnv(env, "BUS_SUBCMD_EXIT_CODE", "9")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "update", "package", "verify"}, env, nil, &stdout, &stderr)
+
+	if code != 9 {
+		t.Fatalf("expected exit code 9, got %d (stderr: %q)", code, stderr.String())
+	}
+}
+
 func TestRunAuditEvidenceCoverageAliasDispatchesToValidate(t *testing.T) {
 	t.Parallel()
 

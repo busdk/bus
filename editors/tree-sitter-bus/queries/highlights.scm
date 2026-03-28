@@ -1,0 +1,13 @@
+(shebang) @comment
+(comment) @comment
+(include_path) @string
+(command_name) @function
+(subcommand_name) @function
+(long_flag) @keyword
+(short_flag) @keyword
+(assignment_key) @property
+"=" @operator
+(string) @string
+(date) @number
+(number) @number
+(continuation) @operator
