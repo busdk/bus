@@ -142,13 +142,16 @@ func TestRunGlobalHelpShortCircuits(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("expected no stderr, got %q", stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "usage: bus [global-flags] <command> [args...]") {
+	if !strings.Contains(stdout.String(), "Usage:\n  bus [global flags] <command> [args...]") {
 		t.Fatalf("expected global help usage, got %q", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "use `bus shell` for interactive command entry") {
 		t.Fatalf("expected shell tip in global help, got %q", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "available commands:") {
+	if !strings.Contains(stdout.String(), "Usage:") || !strings.Contains(stdout.String(), "Behavior:") || !strings.Contains(stdout.String(), "Global flags:") {
+		t.Fatalf("expected structured help sections, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Available commands:") {
 		t.Fatalf("expected available commands in help, got %q", stdout.String())
 	}
 }
@@ -549,7 +552,7 @@ func parseSubcommands(help string) []string {
 	var commands []string
 	start := false
 	for _, line := range lines {
-		if strings.TrimSpace(line) == "available commands:" {
+		if strings.TrimSpace(line) == "available commands:" || strings.TrimSpace(line) == "Available commands:" {
 			start = true
 			continue
 		}
