@@ -43,4 +43,18 @@ PATH="$TEST_PATH" "$BIN" --check "$WS/check_journal_row_desc.bus" > "$WS/check_j
 ! test -s "$WS/check_journal_row_desc.out"
 ! test -s "$WS/check_journal_row_desc.err"
 
+cat > "$WS/check_journal_row_desc_unquoted.bus" <<'EOF_CHECK_JOURNAL_ROW_DESC_UNQUOTED'
+journal add --date 2024-10-31 --desc test --debit 1911=924.10=Asiakkaan maksusuoritus pankkiin --credit 3001=924.10=Oma hostingpalvelu HG-asiakkaalle
+EOF_CHECK_JOURNAL_ROW_DESC_UNQUOTED
+PATH="$TEST_PATH" "$BIN" --check "$WS/check_journal_row_desc_unquoted.bus" > "$WS/check_journal_row_desc_unquoted.out" 2> "$WS/check_journal_row_desc_unquoted.err"
+! test -s "$WS/check_journal_row_desc_unquoted.out"
+! test -s "$WS/check_journal_row_desc_unquoted.err"
+
+cat > "$WS/check_journal_plain_posting.bus" <<'EOF_CHECK_JOURNAL_PLAIN_POSTING'
+journal add --date 2024-10-31 --desc test --debit 1911=924.10 --credit 3001=924.10 --source-id b26197 --source-entry 1
+EOF_CHECK_JOURNAL_PLAIN_POSTING
+PATH="$TEST_PATH" "$BIN" --check "$WS/check_journal_plain_posting.bus" > "$WS/check_journal_plain_posting.out" 2> "$WS/check_journal_plain_posting.err"
+! test -s "$WS/check_journal_plain_posting.out"
+! test -s "$WS/check_journal_plain_posting.err"
+
 echo "e2e OK"

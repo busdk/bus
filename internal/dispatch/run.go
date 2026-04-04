@@ -1241,7 +1241,10 @@ func validateJournalAdd(args []string) error {
 	hasCredit := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if arg == "--date" {
+		switch {
+		case arg == "" || !strings.HasPrefix(arg, "-"):
+			return fmt.Errorf("journal add accepts only flags")
+		case arg == "--date":
 			if i+1 >= len(args) {
 				return fmt.Errorf("journal add missing value for --date")
 			}
@@ -1250,21 +1253,12 @@ func validateJournalAdd(args []string) error {
 			}
 			i++
 			continue
-		}
-		if arg == "--debit" || arg == "--credit" || strings.HasPrefix(arg, "--debit=") || strings.HasPrefix(arg, "--credit=") {
-			kind := arg
-			posting := ""
-			if strings.HasPrefix(arg, "--debit=") || strings.HasPrefix(arg, "--credit=") {
-				flagName, value, _ := strings.Cut(arg, "=")
-				kind = flagName
-				posting = value
-			} else {
-				if i+1 >= len(args) {
-					return fmt.Errorf("journal add missing value for %s", arg)
-				}
-				posting = args[i+1]
-				i++
+		case arg == "--debit" || arg == "--credit" || strings.HasPrefix(arg, "--debit=") || strings.HasPrefix(arg, "--credit="):
+			kind, posting, next, err := collectValidatedJournalPosting(args, i)
+			if err != nil {
+				return err
 			}
+			i = next
 			amount, err := parseValidatedJournalPostingAmount(posting)
 			if err != nil {
 				return err
@@ -1276,6 +1270,16 @@ func validateJournalAdd(args []string) error {
 				hasCredit = true
 				creditTotal.Add(amount)
 			}
+		case strings.Contains(arg, "="):
+			continue
+		case journalAddFlagConsumesFollowingValue(arg):
+			if i+1 >= len(args) {
+				return fmt.Errorf("journal add missing value for %s", arg)
+			}
+			i++
+			continue
+		default:
+			continue
 		}
 	}
 	if !hasDebit || !hasCredit {
@@ -1285,6 +1289,75 @@ func validateJournalAdd(args []string) error {
 		return fmt.Errorf("journal add unbalanced entry: debit=%s credit=%s", debitTotal.String(), creditTotal.String())
 	}
 	return nil
+}
+
+// collectValidatedJournalPosting rebuilds one dispatcher-preflight debit/credit token.
+// Used by: validateJournalAdd during `.bus` syntax/data preflight before bus-journal executes.
+func collectValidatedJournalPosting(args []string, i int) (string, string, int, error) {
+	arg := args[i]
+	if strings.HasPrefix(arg, "--debit=") || strings.HasPrefix(arg, "--credit=") {
+		flagName, value, _ := strings.Cut(arg, "=")
+		posting, next := collectJournalPostingContinuation(args, value, i)
+		return flagName, posting, next, nil
+	}
+	if i+1 >= len(args) {
+		return "", "", i, fmt.Errorf("journal add missing value for %s", arg)
+	}
+	posting, next := collectJournalPostingContinuation(args, args[i+1], i+1)
+	return arg, posting, next, nil
+}
+
+// collectJournalPostingContinuation joins replay-tokenized row-description fragments until next flag.
+// Used by: collectValidatedJournalPosting while reconstructing ACCOUNT=AMOUNT=ROW_DESCRIPTION values.
+func collectJournalPostingContinuation(args []string, posting string, valueIndex int) (string, int) {
+	if strings.Count(posting, "=") < 2 {
+		return posting, valueIndex
+	}
+	parts := []string{posting}
+	for valueIndex+1 < len(args) {
+		candidate := args[valueIndex+1]
+		if candidate == "" || strings.HasPrefix(candidate, "-") {
+			break
+		}
+		parts = append(parts, candidate)
+		valueIndex++
+	}
+	return strings.Join(parts, " "), valueIndex
+}
+
+// journalAddFlagConsumesFollowingValue reports which journal-add flags expect a separate next-token value.
+// Used by: validateJournalAdd to avoid misclassifying ordinary flag values as positional tokens.
+func journalAddFlagConsumesFollowingValue(flag string) bool {
+	switch flag {
+	case "--date",
+		"--desc",
+		"--description",
+		"--posting-desc",
+		"--posting-description",
+		"--created-at",
+		"--updated-at",
+		"--created-by",
+		"--updated-by",
+		"--source-id",
+		"--source-object",
+		"--source",
+		"--source-kind",
+		"--source-entry",
+		"--entry-seq",
+		"--source-system",
+		"--external-source-ref",
+		"--vat-treatment",
+		"--source-link",
+		"--source-voucher-context",
+		"--source-voucher-number",
+		"--source-voucher-label",
+		"--source-voucher-group",
+		"--dim",
+		"--bulk-in":
+		return true
+	default:
+		return false
+	}
 }
 
 // parseValidatedJournalPostingAmount validates one journal add posting token in dispatcher preflight.
