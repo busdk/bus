@@ -1143,6 +1143,38 @@ func TestRunBusfileTrace(t *testing.T) {
 	}
 }
 
+func TestRunBusfileRelativePathResolvedAfterGlobalChdir(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+
+	workspace := filepath.Join(tempDir, "workspace", "data")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	busfile := filepath.Join(tempDir, "workspace", "replay.bus")
+	if err := os.WriteFile(busfile, []byte("accounts alpha\n"), 0o600); err != nil {
+		t.Fatalf("write busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	withChdir(t, tempDir, func() {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus", "-C", "workspace/data", "../replay.bus"}, env, nil, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("expected exit 0, got %d (stderr: %q)", code, stderr.String())
+		}
+		if stdout.String() != "ACCOUNTS:alpha\n" {
+			t.Fatalf("expected busfile execution output, got %q", stdout.String())
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("expected no stderr, got %q", stderr.String())
+		}
+	})
+}
+
 func TestRunBusfileTransactionFromDatapackageFallbackToNone(t *testing.T) {
 	tempDir := t.TempDir()
 	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")

@@ -113,6 +113,10 @@ Reset directives are supported for sticky state: `--no-perf`, `--no-quiet`,
 `--no-verbose`, `--no-chdir`, `--no-output`, and `--no-format`. Color already
 uses `--color ...` and `--no-color`.
 
+Dispatcher-level `-C/--chdir` also applies when the invocation enters busfile
+mode. Relative busfile paths are resolved after switching into that workspace,
+and the executed module commands inherit the same effective working directory.
+
 ## Editor support for `.bus`
 
 The repository ships three editor-tooling layers for `.bus` files:

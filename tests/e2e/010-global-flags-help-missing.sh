@@ -50,9 +50,10 @@ diff -u "$WS/expected_missing.err" "$WS/missing.err"
 grep -q '^bus: missing subcommand:' "$WS/missing.err"
 
 PATH="$TEST_PATH" "$BIN" --help > "$WS/help_global.out" 2> "$WS/help_global.err"
-grep -q '^usage: bus \[global-flags\] <command> \[args...\]$' "$WS/help_global.out"
-grep -q '^  -C, --chdir <dir>$' "$WS/help_global.out"
-grep -q '^available commands:$' "$WS/help_global.out"
+grep -q '^Usage:$' "$WS/help_global.out"
+grep -q '^  bus \[global flags\] <command> \[args...\]$' "$WS/help_global.out"
+grep -q '^  -C, --chdir <dir>    Change working directory before dispatch$' "$WS/help_global.out"
+grep -q '^Available commands:$' "$WS/help_global.out"
 ! test -s "$WS/help_global.err"
 
 PATH="$TEST_PATH" "$BIN" --version > "$WS/version_global.out" 2> "$WS/version_global.err"

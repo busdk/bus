@@ -149,6 +149,7 @@ type busfileOptions struct {
 	transactionSet bool
 	scope          string
 	scopeSet       bool
+	workdir        string
 	files          []string
 }
 
@@ -441,6 +442,14 @@ func parseBusfileMode(args []string) (busfileOptions, bool, error) {
 		switch {
 		case arg == "--":
 			return opts, false, nil
+		case arg == "--no-chdir":
+			opts.workdir = ""
+		case arg == "-C" || arg == "--chdir":
+			if i+1 >= len(args) {
+				return opts, true, fmt.Errorf("missing value for %s", arg)
+			}
+			opts.workdir = args[i+1]
+			i++
 		case arg == "--check":
 			opts.check = true
 			sawBusfileFlag = true
@@ -477,13 +486,14 @@ func parseBusfileMode(args []string) (busfileOptions, bool, error) {
 			}
 			return opts, false, nil
 		default:
-			if len(opts.files) == 0 && !isBusfilePath(arg) {
+			resolvedPath := resolveBusfileCandidatePath(opts.workdir, arg)
+			if len(opts.files) == 0 && !isBusfilePath(resolvedPath) {
 				return opts, false, nil
 			}
-			if len(opts.files) > 0 && !isBusfilePath(arg) {
+			if len(opts.files) > 0 && !isBusfilePath(resolvedPath) {
 				return opts, true, fmt.Errorf("expected busfile path, got %q", arg)
 			}
-			opts.files = append(opts.files, arg)
+			opts.files = append(opts.files, resolvedPath)
 		}
 	}
 
@@ -505,7 +515,9 @@ func parseBusfileMode(args []string) (busfileOptions, bool, error) {
 func runBusfiles(opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	registerTestBusfileRunners(env)
 	cfg := loadBusfileConfig()
-	return runBusfilesWithExecutor(opts, env, stdin, stdout, stderr, cfg)
+	return runWithinWorkdir(opts.workdir, stderr, func() int {
+		return runBusfilesWithExecutor(opts, env, stdin, stdout, stderr, cfg)
+	})
 }
 
 func runBusfilesWithExecutor(opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, cfg busfileConfig) int {
@@ -1777,6 +1789,42 @@ func isBusfilePath(path string) bool {
 		return false
 	}
 	return line == "#!/usr/bin/bus" || line == "#!/usr/bin/env bus"
+}
+
+// resolveBusfileCandidatePath resolves one busfile CLI path against dispatcher-level --chdir context.
+// Used by: parseBusfileMode before busfile recognition and preflight collection.
+func resolveBusfileCandidatePath(workdir, path string) string {
+	if workdir == "" || filepath.IsAbs(path) {
+		return path
+	}
+	base := workdir
+	if !filepath.IsAbs(base) {
+		if cwd, err := os.Getwd(); err == nil {
+			base = filepath.Join(cwd, base)
+		}
+	}
+	return filepath.Clean(filepath.Join(base, path))
+}
+
+// runWithinWorkdir executes one dispatcher operation inside an optional effective working directory.
+// Used by: runBusfiles so busfile resolution and child execution honor dispatcher-level --chdir.
+func runWithinWorkdir(workdir string, stderr io.Writer, fn func() int) int {
+	if workdir == "" {
+		return fn()
+	}
+	oldWD, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "bus: failed to resolve current working directory: %v\n", err)
+		return 1
+	}
+	if err := os.Chdir(workdir); err != nil {
+		fmt.Fprintf(stderr, "bus: failed to change directory to %s: %v\n", workdir, err)
+		return 1
+	}
+	defer func() {
+		_ = os.Chdir(oldWD)
+	}()
+	return fn()
 }
 
 func readFirstLine(path string) (string, error) {
