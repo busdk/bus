@@ -1251,30 +1251,31 @@ func validateJournalAdd(args []string) error {
 			i++
 			continue
 		}
-		if arg == "--debit" || arg == "--credit" {
-			if i+1 >= len(args) {
-				return fmt.Errorf("journal add missing value for %s", arg)
+		if arg == "--debit" || arg == "--credit" || strings.HasPrefix(arg, "--debit=") || strings.HasPrefix(arg, "--credit=") {
+			kind := arg
+			posting := ""
+			if strings.HasPrefix(arg, "--debit=") || strings.HasPrefix(arg, "--credit=") {
+				flagName, value, _ := strings.Cut(arg, "=")
+				kind = flagName
+				posting = value
+			} else {
+				if i+1 >= len(args) {
+					return fmt.Errorf("journal add missing value for %s", arg)
+				}
+				posting = args[i+1]
+				i++
 			}
-			posting := args[i+1]
-			account, amountText, ok := strings.Cut(posting, "=")
-			if !ok || strings.TrimSpace(account) == "" || strings.TrimSpace(amountText) == "" {
-				return fmt.Errorf("journal add invalid posting %q", posting)
+			amount, err := parseValidatedJournalPostingAmount(posting)
+			if err != nil {
+				return err
 			}
-			amount, ok := parseDecimalAmount(amountText)
-			if !ok {
-				return fmt.Errorf("journal add invalid amount %q", amountText)
-			}
-			if amount.value.Sign() <= 0 {
-				return fmt.Errorf("journal add amount must be positive: %q", amountText)
-			}
-			if arg == "--debit" {
+			if kind == "--debit" {
 				hasDebit = true
 				debitTotal.Add(amount)
 			} else {
 				hasCredit = true
 				creditTotal.Add(amount)
 			}
-			i++
 		}
 	}
 	if !hasDebit || !hasCredit {
@@ -1284,6 +1285,24 @@ func validateJournalAdd(args []string) error {
 		return fmt.Errorf("journal add unbalanced entry: debit=%s credit=%s", debitTotal.String(), creditTotal.String())
 	}
 	return nil
+}
+
+// parseValidatedJournalPostingAmount validates one journal add posting token in dispatcher preflight.
+// Used by: validateJournalAdd during `.bus` syntax/data preflight before bus-journal executes.
+func parseValidatedJournalPostingAmount(posting string) (decimalAmount, error) {
+	parts := strings.SplitN(posting, "=", 3)
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return decimalAmount{}, fmt.Errorf("journal add invalid posting %q", posting)
+	}
+	amountText := strings.TrimSpace(parts[1])
+	amount, ok := parseDecimalAmount(amountText)
+	if !ok {
+		return decimalAmount{}, fmt.Errorf("journal add invalid amount %q", amountText)
+	}
+	if amount.value.Sign() <= 0 {
+		return decimalAmount{}, fmt.Errorf("journal add amount must be positive: %q", amountText)
+	}
+	return amount, nil
 }
 
 func validateBankAddTransactions(args []string) error {

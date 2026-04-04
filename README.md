@@ -116,6 +116,10 @@ uses `--color ...` and `--no-color`.
 Dispatcher-level `-C/--chdir` also applies when the invocation enters busfile
 mode. Relative busfile paths are resolved after switching into that workspace,
 and the executed module commands inherit the same effective working directory.
+For replay authoring, dispatcher preflight accepts the same documented
+`bus journal add` posting syntax as the module itself, including
+`ACCOUNT=AMOUNT=ROW_DESCRIPTION` with quoted UTF-8 text and spaces in `.bus`
+files and under `bus --check`.
 
 ## Editor support for `.bus`
 

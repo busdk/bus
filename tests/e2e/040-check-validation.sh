@@ -36,4 +36,11 @@ test "$check_bank_invalid_code" -eq 1
 ! test -s "$WS/check_bank_invalid.out"
 grep -q 'validation error: bank add transactions invalid booked_date' "$WS/check_bank_invalid.err"
 
+cat > "$WS/check_journal_row_desc.bus" <<'EOF_CHECK_JOURNAL_ROW_DESC'
+journal add --date 2024-10-31 --desc test --debit '1911=924.10=Asiakkaan maksusuoritus pankkiin' --credit '3001=924.10=Oma hostingpalvelu HG-asiakkaalle'
+EOF_CHECK_JOURNAL_ROW_DESC
+PATH="$TEST_PATH" "$BIN" --check "$WS/check_journal_row_desc.bus" > "$WS/check_journal_row_desc.out" 2> "$WS/check_journal_row_desc.err"
+! test -s "$WS/check_journal_row_desc.out"
+! test -s "$WS/check_journal_row_desc.err"
+
 echo "e2e OK"
