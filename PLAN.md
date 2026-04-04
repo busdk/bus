@@ -2,7 +2,7 @@
 
 ## Active feature plan
 
-- [ ] Reproduce and fix dispatcher `.bus` preflight handling for `journal add` row descriptions end-to-end in `bus`: make `bus --check <file.bus>` and normal replay execution accept the documented `ACCOUNT=AMOUNT=ROW_DESCRIPTION` debit/credit syntax with quoted UTF-8 text and spaces, keep validation semantics aligned with direct `bus journal add`, and land implementation, unit tests, e2e coverage, README, end-user docs, SDD updates, and tracker cleanup in the same change.
+- [x] Reproduce and fix dispatcher `.bus` preflight handling for `journal add` row descriptions end-to-end in `bus`: make `bus --check <file.bus>` and normal replay execution accept the documented `ACCOUNT=AMOUNT=ROW_DESCRIPTION` debit/credit syntax with quoted UTF-8 text and spaces, keep validation semantics aligned with direct `bus journal add`, and land implementation, unit tests, e2e coverage, README, end-user docs, SDD updates, and tracker cleanup in the same change.
 
 - [x] Reproduce and fix dispatcher busfile execution with global `-C` end-to-end in `bus`: make `bus -C <workspace> <path-to-file.bus>` resolve and execute busfiles relative to the changed working directory instead of falling through to normal missing-subcommand dispatch, preserve the longstanding replay workflow for relative and absolute busfile paths or emit an explicit replacement/deprecation diagnostic if that shape is intentionally retired, and land implementation, unit tests, e2e coverage, README, end-user docs, SDD updates, and tracker cleanup in the same change.
 
