@@ -1390,6 +1390,31 @@ func TestRunCheckBusfileAcceptsJournalRowDescriptions(t *testing.T) {
 	})
 }
 
+func TestRunCheckBusfileAcceptsQuotedJournalRowDescriptionsWithPunctuation(t *testing.T) {
+	tempDir := t.TempDir()
+	busfile := filepath.Join(tempDir, "replay.bus")
+	content := "journal add --date 2024-10-31 --desc test --debit '1911=924.10=Asiakkaan maksusuoritus + alv' --credit '3001=924.10=Muistutusmaksut Reminder Fee -rivistä'\n"
+	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
+		t.Fatalf("write busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	withChdir(t, tempDir, func() {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus", "--check", busfile}, env, nil, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("expected exit 0, got %d (stderr: %q)", code, stderr.String())
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("expected no stdout, got %q", stdout.String())
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("expected no stderr, got %q", stderr.String())
+		}
+	})
+}
+
 func TestRunCheckBusfileAcceptsJournalRowDescriptionsWithoutQuotes(t *testing.T) {
 	tempDir := t.TempDir()
 	busfile := filepath.Join(tempDir, "replay.bus")

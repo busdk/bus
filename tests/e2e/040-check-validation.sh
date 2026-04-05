@@ -43,6 +43,13 @@ PATH="$TEST_PATH" "$BIN" --check "$WS/check_journal_row_desc.bus" > "$WS/check_j
 ! test -s "$WS/check_journal_row_desc.out"
 ! test -s "$WS/check_journal_row_desc.err"
 
+cat > "$WS/check_journal_row_desc_quoted_punctuation.bus" <<'EOF_CHECK_JOURNAL_ROW_DESC_QUOTED_PUNCT'
+journal add --date 2024-10-31 --desc test --debit '1911=924.10=Asiakkaan maksusuoritus + alv' --credit '3001=924.10=Muistutusmaksut Reminder Fee -rivistä'
+EOF_CHECK_JOURNAL_ROW_DESC_QUOTED_PUNCT
+PATH="$TEST_PATH" "$BIN" --check "$WS/check_journal_row_desc_quoted_punctuation.bus" > "$WS/check_journal_row_desc_quoted_punctuation.out" 2> "$WS/check_journal_row_desc_quoted_punctuation.err"
+! test -s "$WS/check_journal_row_desc_quoted_punctuation.out"
+! test -s "$WS/check_journal_row_desc_quoted_punctuation.err"
+
 cat > "$WS/check_journal_row_desc_unquoted.bus" <<'EOF_CHECK_JOURNAL_ROW_DESC_UNQUOTED'
 journal add --date 2024-10-31 --desc test --debit 1911=924.10=Asiakkaan maksusuoritus pankkiin --credit 3001=924.10=Oma hostingpalvelu HG-asiakkaalle
 EOF_CHECK_JOURNAL_ROW_DESC_UNQUOTED
