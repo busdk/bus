@@ -527,6 +527,13 @@ func FuzzRunMissingSubcommand(f *testing.F) {
 		var stderr bytes.Buffer
 		code := dispatch.Run([]string{"bus", subcommand}, env, nil, io.Discard, &stderr)
 
+		if code == 2 {
+			output := stderr.String()
+			if !strings.Contains(output, "invalid usage") && !strings.Contains(output, "usage: bus <command> [args...]") {
+				t.Fatalf("expected usage error, got %q", output)
+			}
+			return
+		}
 		if code != 127 {
 			t.Fatalf("expected exit code 127, got %d", code)
 		}
@@ -1367,6 +1374,7 @@ func TestRunBusfileShellLookupDisabledViaDatapackage(t *testing.T) {
 
 func TestRunCheckBusfileAcceptsJournalRowDescriptions(t *testing.T) {
 	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "journal", "JOURNAL")
 	busfile := filepath.Join(tempDir, "replay.bus")
 	content := "journal add --date 2024-10-31 --desc test --debit '1911=924.10=Asiakkaan maksusuoritus pankkiin' --credit '3001=924.10=Oma hostingpalvelu HG-asiakkaalle'\n"
 	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
@@ -1392,6 +1400,7 @@ func TestRunCheckBusfileAcceptsJournalRowDescriptions(t *testing.T) {
 
 func TestRunCheckBusfileAcceptsQuotedJournalRowDescriptionsWithPunctuation(t *testing.T) {
 	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "journal", "JOURNAL")
 	busfile := filepath.Join(tempDir, "replay.bus")
 	content := "journal add --date 2024-10-31 --desc test --debit '1911=924.10=Asiakkaan maksusuoritus + alv' --credit '3001=924.10=Muistutusmaksut Reminder Fee -rivistä'\n"
 	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
@@ -1417,6 +1426,7 @@ func TestRunCheckBusfileAcceptsQuotedJournalRowDescriptionsWithPunctuation(t *te
 
 func TestRunCheckBusfileAcceptsJournalRowDescriptionsWithoutQuotes(t *testing.T) {
 	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "journal", "JOURNAL")
 	busfile := filepath.Join(tempDir, "replay.bus")
 	content := "journal add --date 2024-10-31 --desc test --debit 1911=924.10=Asiakkaan maksusuoritus pankkiin --credit 3001=924.10=Oma hostingpalvelu HG-asiakkaalle\n"
 	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
@@ -1442,6 +1452,7 @@ func TestRunCheckBusfileAcceptsJournalRowDescriptionsWithoutQuotes(t *testing.T)
 
 func TestRunCheckBusfileAcceptsJournalPostingsWithoutRowDescriptions(t *testing.T) {
 	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "journal", "JOURNAL")
 	busfile := filepath.Join(tempDir, "replay.bus")
 	content := "journal add --date 2024-10-31 --desc test --debit 1911=924.10 --credit 3001=924.10 --source-id b26197 --source-entry 1\n"
 	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
