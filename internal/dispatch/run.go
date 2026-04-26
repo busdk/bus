@@ -2212,41 +2212,41 @@ func writeUsage(env []string, stderr io.Writer) {
 }
 
 func writeHelp(env []string, stdout io.Writer) {
-	fmt.Fprintln(stdout, "bus: dispatch BusDK subcommands from PATH")
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Usage:")
-	fmt.Fprintln(stdout, "  bus [global flags] <command> [args...]")
-	fmt.Fprintln(stdout, "  bus help")
-	fmt.Fprintln(stdout, "  bus help <command>")
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Behavior:")
-	fmt.Fprintln(stdout, "  Dispatches bus-<command> from PATH and passes the remaining arguments through unchanged.")
-	fmt.Fprintln(stdout, "  Tip: use `bus shell` for interactive command entry.")
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Global flags:")
-	fmt.Fprintln(stdout, "  -h, --help           Show help and exit")
-	fmt.Fprintln(stdout, "  -V, --version        Show version and exit")
-	fmt.Fprintln(stdout, "  -v, --verbose        Increase stderr verbosity")
-	fmt.Fprintln(stdout, "      --no-verbose     Disable verbose mode")
-	fmt.Fprintln(stdout, "      --perf           Ask child command to emit timing lines")
-	fmt.Fprintln(stdout, "      --no-perf        Disable perf forwarding")
-	fmt.Fprintln(stdout, "  -q, --quiet          Suppress normal output")
-	fmt.Fprintln(stdout, "      --no-quiet       Disable quiet mode")
-	fmt.Fprintln(stdout, "  -C, --chdir <dir>    Change working directory before dispatch")
-	fmt.Fprintln(stdout, "      --no-chdir       Clear earlier --chdir")
-	fmt.Fprintln(stdout, "  -o, --output <file>  Write normal output to file")
-	fmt.Fprintln(stdout, "      --no-output      Clear earlier --output")
-	fmt.Fprintln(stdout, "  -f, --format <fmt>   Forward explicit output format")
-	fmt.Fprintln(stdout, "      --no-format      Clear earlier --format")
-	fmt.Fprintln(stdout, "      --color <mode>   Color mode: auto, always, never")
-	fmt.Fprintln(stdout, "      --no-color       Same as --color=never")
-	fmt.Fprintln(stdout, "  --                   End of global flag parsing")
+	io.WriteString(stdout, `bus: dispatch BusDK subcommands from PATH
+
+Usage:
+  bus [global flags] <command> [args...]
+  bus help
+  bus help <command>
+
+Behavior:
+  Dispatches bus-<command> from PATH and passes the remaining arguments through unchanged.
+  Tip: use `+"`bus shell`"+` for interactive command entry.
+
+Global flags:
+  -h, --help           Show help and exit
+  -V, --version        Show version and exit
+  -v, --verbose        Increase stderr verbosity
+      --no-verbose     Disable verbose mode
+      --perf           Ask child command to emit timing lines
+      --no-perf        Disable perf forwarding
+  -q, --quiet          Suppress normal output
+      --no-quiet       Disable quiet mode
+  -C, --chdir <dir>    Change working directory before dispatch
+      --no-chdir       Clear earlier --chdir
+  -o, --output <file>  Write normal output to file
+      --no-output      Clear earlier --output
+  -f, --format <fmt>   Forward explicit output format
+      --no-format      Clear earlier --format
+      --color <mode>   Color mode: auto, always, never
+      --no-color       Same as --color=never
+  --                   End of global flag parsing
+`)
 	subcommands := listSubcommands(env)
 	if len(subcommands) == 0 {
 		return
 	}
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Available commands:")
+	io.WriteString(stdout, "\nAvailable commands:\n")
 	for _, name := range subcommands {
 		fmt.Fprintf(stdout, "  %s\n", name)
 	}

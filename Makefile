@@ -14,6 +14,8 @@ BINDIR ?= $(PREFIX)/bin
 DESTDIR ?=
 INSTALL ?= install
 CGO_ENABLED ?= 0
+BUS_DEV ?= bus-dev
+BUS_GO_QUALITY_PROFILE ?= cli
 STAMP_DIR := .make
 RUN_FUZZ ?= 0
 FUZZTIME ?= 1s
@@ -151,6 +153,7 @@ lint: $(LINT_STAMP)
 $(LINT_STAMP): $(GO_FILES) $(GO_DEPS) $(BUILD_SRC_DEPS) $(WASM_STAMP)
 	mkdir -p $(STAMP_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet $(TEST_PKGS)
+	$(BUS_DEV) quality lint --profile "$(BUS_GO_QUALITY_PROFILE)" .
 	touch $(LINT_STAMP)
 
 test: $(TEST_STAMP)
