@@ -106,7 +106,7 @@ FUZZ_STAMP := $(STAMP_DIR)/fuzz.stamp
 BENCH_STAMP := $(STAMP_DIR)/bench.stamp
 E2E_STAMP := $(STAMP_DIR)/e2e.stamp
 
-.PHONY: all tidy build build-debug build-wasm test color-test test-fuzz test-bench color-bench bench test-docker test-e2e e2e fmt lint check benchmeta package-vscode-extension check-vscode-extension-release check-tree-sitter-bus-language check-bus-language-server install uninstall clean
+.PHONY: all tidy build build-debug build-wasm test color-test test-fuzz test-bench color-bench bench test-docker test-e2e e2e fmt lint quality check benchmeta package-vscode-extension check-vscode-extension-release check-tree-sitter-bus-language check-bus-language-server install uninstall clean
 
 all: build
 
@@ -155,6 +155,8 @@ $(LINT_STAMP): $(GO_FILES) $(GO_DEPS) $(BUILD_SRC_DEPS) $(WASM_STAMP)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet $(TEST_PKGS)
 	$(BUS_DEV) quality lint --profile "$(BUS_GO_QUALITY_PROFILE)" .
 	touch $(LINT_STAMP)
+
+quality: fmt lint
 
 test: $(TEST_STAMP)
 
