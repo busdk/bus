@@ -251,6 +251,46 @@ func TestRunDispatchesAndPassesArgs(t *testing.T) {
 	}
 }
 
+func TestRunDispatchesNestedWordsToFirstWordOwner(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "operator", "OPERATOR")
+	buildFakeSubcommand(t, tempDir, "operator-billing", "BILLING")
+	env := prependPath(os.Environ(), tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "operator", "billing", "catalog", "sync"}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "OPERATOR:billing catalog sync\n" {
+		t.Fatalf("expected first-word owner output, got %q", stdout.String())
+	}
+}
+
+func TestRunNestedSubcommandPerfUsesFirstWordModuleName(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "operator", "OPERATOR")
+	env := prependPath(os.Environ(), tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "--perf", "operator", "billing", "catalog", "sync"}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "OPERATOR:billing catalog sync\n" {
+		t.Fatalf("expected first-word owner output, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "INFO perf bus-operator billing ") {
+		t.Fatalf("expected first-word perf line, got %q", stderr.String())
+	}
+}
+
 func TestRunUpdatePackageDispatchesToBusUpdate(t *testing.T) {
 	t.Parallel()
 

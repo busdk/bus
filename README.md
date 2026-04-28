@@ -42,6 +42,18 @@ bus accounts summary --month=2026-01
 This resolves and runs `bus-accounts` from `PATH`, passing through arguments,
 stdin, stdout, stderr, and environment unchanged.
 
+Nested command families still dispatch to the first command word owner. For
+example:
+
+```sh
+bus operator billing catalog sync
+```
+
+runs `bus-operator billing catalog sync`. If `bus-operator` wants focused
+operator families such as billing or Stripe, it must dispatch to those
+implementations through Go library imports, not by relying on `bus` to execute
+nested child binaries.
+
 Bootstrap and managed-package flows use the same delegation model:
 
 ```sh
@@ -79,6 +91,10 @@ When listing available commands, `bus`:
 - Silently skips missing/inaccessible entries.
 - Deduplicates by command name, preferring the earliest `PATH` entry.
 - Sorts command names lexicographically before printing.
+
+Command names may contain hyphens. Hyphenated binaries can be invoked either
+directly as one command word when appropriate, or as nested words when installed
+as a longer command prefix.
 
 ## Exit codes
 

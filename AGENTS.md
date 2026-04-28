@@ -32,7 +32,7 @@ Agent-facing instructions for the `bus` core dispatcher repository. This module 
 
 - **Pattern:** `bus <command> [args...]`. This module is the dispatcher; it does not implement domain subcommands.
 - **Installer/package-manager boundary:** bootstrap installer and package-manager UX may be exposed through `bus ...` only as delegated command families executed via `bus-update`; do not embed installer, package download, or package database logic into the `bus` dispatcher itself.
-- **Dispatch:** Resolve the executable with `exec.LookPath("bus-" + name)` only, then exec with args unchanged, inheriting stdin, stdout, stderr, and environment.
+- **Dispatch:** Resolve only the first command word to a `bus-*` executable, then exec with the remaining args unchanged, inheriting stdin, stdout, stderr, and environment. For example, `bus operator billing catalog sync` must run `bus-operator billing catalog sync`; any deeper family dispatch belongs inside `bus-operator`, not in the root dispatcher.
 - **Busfile dispatch selection:** in `.bus` execution mode, only use in-process runners that are explicitly registered inside this open-source `bus` module; otherwise use `bus-<target>` shell lookup only when `bus.busfile.dispatch.shell_lookup_enabled=true`.
 - **FS transactions:** `provider=fs` is valid only when all busfile targets have in-process transaction-capable runners (Tx runners); otherwise fallback/error rules apply.
 - **No private module wiring:** do not add default in-process or in-process-tx runners for private/other-module commands (for example `bank` or `journal`) in this repository.
@@ -121,6 +121,7 @@ This AGENTS.md was grounded in the following BusDK spec pages:
 - Optimization-guide updates must be additive: do not remove prior guide content when adding new patterns.
 - Dispatcher perf lines must render the duration field with Go duration tokens (`time.Duration.String()`), not fixed decimal seconds, so short operations do not collapse to `0.000`.
 - For content searches limited to Go files in this repo from the superproject root, use `rg ... bus --glob '*.go'`; do not pass recursive shell-glob paths like `bus/**/*.go` as positional arguments to `rg`.
+- This dispatcher repository currently has `cmd/` and `internal/`, but no `pkg/`; do not pass `pkg` or `bus/pkg` as an `rg` root unless it exists.
 - Performance findings already benchmarked in this repo and worth upstreaming to the optimization guide:
   - repeated env rewrites in per-command loops (`withBusfileEnv`/`upsertEnv`) show high allocation churn (`internal/dispatch/run_bench_test.go`)
   - repeated PATH resolution of the same target in batch preflight/dispatch is expensive (`BenchmarkPreflightDispatchTargetsRepeatedLookups` in `internal/dispatch/run_bench_test.go`)

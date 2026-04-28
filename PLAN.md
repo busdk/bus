@@ -2,6 +2,10 @@
 
 ## Active feature plan
 
+- [x] Restore direct dispatcher ownership for nested operator commands end to end: make `bus operator ...` dispatch only to `bus-operator` and let `bus-operator` call focused `bus-operator-*` Go libraries; remove longest-prefix/fallback execution of nested child binaries from the root dispatcher; update e2e coverage and perf expectations; and verify with `make test`, `make e2e`, and `make quality`.
+
+- [x] Superseded the earlier hierarchical module dispatch experiment in `bus`: root dispatch now stays first-word only, so nested families such as `bus operator billing ...` are owned by `bus-operator` and focused submodule behavior is reached through parent-owned Go library dispatch rather than root-dispatcher child-binary fallback.
+
 - [x] Re-verify dispatcher busfile execution with global `-C` end-to-end in `bus`: rerun the reported `bus -C <workspace> ../file.bus` and minimal shebang repros against the current dispatcher, confirm correct busfile execution relative to the changed working directory still works, keep protecting `.bus` preflight coverage in place, and clean up stale tracker entries in the same change.
 
 - [x] Reproduce and fix dispatcher `.bus` preflight handling for `journal add` row descriptions end-to-end in `bus`: make `bus --check <file.bus>` and normal replay execution accept the documented `ACCOUNT=AMOUNT=ROW_DESCRIPTION` debit/credit syntax with quoted UTF-8 text and spaces, keep validation semantics aligned with direct `bus journal add`, and land implementation, unit tests, e2e coverage, README, end-user docs, SDD updates, and tracker cleanup in the same change.

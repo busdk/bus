@@ -52,34 +52,35 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 		return 2
 	}
 
-	subcommand := parsed.subcommand
-	executable := "bus-" + subcommand
-
-	path, err := lookPathEnv(executable, env)
+	target, err := resolveDispatchTarget(parsed, env)
 	if err != nil {
-		if subcommand == "audit" {
+		if parsed.subcommand == "audit" {
 			return runAuditAlias(parsed, env, stdin, stdout, stderr)
 		}
-		if subcommand == "help" {
+		if parsed.subcommand == "help" {
 			writeUsage(env, stderr)
 			return 2
 		}
-		fmt.Fprintf(stderr, "bus: missing subcommand: %s; expected executable named %s in PATH\n", subcommand, executable)
+		executable := "bus-" + parsed.subcommand
+		fmt.Fprintf(stderr, "bus: missing subcommand: %s; expected executable named %s in PATH\n", parsed.subcommand, executable)
 		writeUsage(env, stderr)
 		return 127
 	}
 
 	childArgs := parsed.globals.renderArgs()
-	childArgs = append(childArgs, parsed.subcommandArgs...)
-	cmd := exec.Command(path, childArgs...)
+	childArgs = append(childArgs, target.args...)
+	cmd := exec.Command(target.path, childArgs...)
 	cmd.Env = withPerfEnv(env, parsed.globals.Perf)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
+	logParsed := parsed
+	logParsed.subcommand = target.name
+	logParsed.subcommandArgs = target.args
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
-		logCommandDuration(stderr, parsed, time.Since(start))
+		logCommandDuration(stderr, logParsed, time.Since(start))
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			if code := exitErr.ExitCode(); code >= 0 {
@@ -90,9 +91,28 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 		return 1
 	}
 
-	logCommandDuration(stderr, parsed, time.Since(start))
+	logCommandDuration(stderr, logParsed, time.Since(start))
 
 	return 0
+}
+
+// dispatchTarget describes the resolved bus-* executable and remaining child args.
+// Used by: Run after parsing dispatcher-global flags.
+type dispatchTarget struct {
+	name string
+	path string
+	args []string
+}
+
+// resolveDispatchTarget chooses the direct first-word bus-* executable.
+// Used by: Run to keep command ownership explicit and non-hierarchical.
+func resolveDispatchTarget(parsed parseResult, env []string) (dispatchTarget, error) {
+	path, err := lookPathEnv("bus-"+parsed.subcommand, env)
+	if err != nil {
+		return dispatchTarget{}, exec.ErrNotFound
+	}
+	args := append([]string{}, parsed.subcommandArgs...)
+	return dispatchTarget{name: parsed.subcommand, path: path, args: args}, nil
 }
 
 func runAuditAlias(parsed parseResult, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
