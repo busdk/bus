@@ -42,6 +42,12 @@ bus accounts summary --month=2026-01
 This resolves and runs `bus-accounts` from `PATH`, passing through arguments,
 stdin, stdout, stderr, and environment unchanged.
 
+Before dispatch, `bus` reads `.env` from the effective working directory when
+that file exists. Values are added to the child command environment, but
+variables already present in the process environment keep their existing values.
+Use `KEY=VALUE` or `export KEY=VALUE` lines; blank lines and `#` comments are
+ignored.
+
 Nested command families still dispatch to the first command word owner. For
 example:
 

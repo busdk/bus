@@ -10,6 +10,7 @@ tip: did you mean `bus shell`?
 
 available commands:
   accounts
+  env
   fail
   journal
   ledger
@@ -33,6 +34,7 @@ tip: did you mean `bus shell`?
 
 available commands:
   accounts
+  env
   fail
   journal
   ledger

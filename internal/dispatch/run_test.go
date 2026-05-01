@@ -251,6 +251,92 @@ func TestRunDispatchesAndPassesArgs(t *testing.T) {
 	}
 }
 
+func TestRunLoadsDotenvForDispatchedCommand(t *testing.T) {
+	tempDir := t.TempDir()
+	buildFakeEnvSubcommand(t, tempDir, "env")
+	workspace := t.TempDir()
+	dotenv := strings.Join([]string{
+		"# local dispatcher environment",
+		"BUS_DOTENV_LOADED=from-dotenv",
+		"export BUS_DOTENV_EXPORTED=exported",
+		"BUS_DOTENV_SPACED = spaced value",
+		"BUS_DOTENV_EXISTING=from-dotenv",
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(workspace, ".env"), []byte(dotenv), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	env := prependPath(os.Environ(), tempDir)
+	env = setEnv(env, "BUS_DOTENV_EXISTING", "from-process")
+
+	withChdir(t, workspace, func() {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus", "env", "BUS_DOTENV_LOADED", "BUS_DOTENV_EXPORTED", "BUS_DOTENV_SPACED", "BUS_DOTENV_EXISTING"}, env, nil, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+		}
+		want := strings.Join([]string{
+			"BUS_DOTENV_LOADED=from-dotenv",
+			"BUS_DOTENV_EXPORTED=exported",
+			"BUS_DOTENV_SPACED=spaced value",
+			"BUS_DOTENV_EXISTING=from-process",
+			"",
+		}, "\n")
+		if stdout.String() != want {
+			t.Fatalf("unexpected dotenv env output:\nwant %q\ngot  %q", want, stdout.String())
+		}
+	})
+}
+
+func TestRunLoadsDotenvFromChdirDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	buildFakeEnvSubcommand(t, tempDir, "env")
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.Mkdir(workspace, 0o700); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("BUS_DOTENV_SCOPE=wrong\n"), 0o600); err != nil {
+		t.Fatalf("write root .env: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, ".env"), []byte("BUS_DOTENV_SCOPE=from-chdir\n"), 0o600); err != nil {
+		t.Fatalf("write workspace .env: %v", err)
+	}
+	env := prependPath(os.Environ(), tempDir)
+
+	withChdir(t, root, func() {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus", "-C", workspace, "env", "BUS_DOTENV_SCOPE"}, env, nil, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+		}
+		if stdout.String() != "BUS_DOTENV_SCOPE=from-chdir\n" {
+			t.Fatalf("expected chdir .env value, got %q", stdout.String())
+		}
+	})
+}
+
+func TestRunRejectsInvalidDotenv(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, ".env"), []byte("1INVALID=value\n"), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	env := setEnv(os.Environ(), "PATH", "")
+
+	withChdir(t, workspace, func() {
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus", "missing"}, env, nil, io.Discard, &stderr)
+		if code != 2 {
+			t.Fatalf("expected exit code 2, got %d", code)
+		}
+		if !strings.Contains(stderr.String(), `bus: failed to load .env: .env:1: invalid environment variable name "1INVALID"`) {
+			t.Fatalf("expected dotenv parse diagnostic, got %q", stderr.String())
+		}
+	})
+}
+
 func TestRunDispatchesNestedWordsToFirstWordOwner(t *testing.T) {
 	t.Parallel()
 
@@ -736,6 +822,58 @@ func main() {
 	return outputPath
 }
 
+func buildFakeEnvSubcommand(t *testing.T, targetDir, subcommand string) string {
+	t.Helper()
+
+	sourceDir := t.TempDir()
+	goMod := "module bus-env-subcmd\n\ngo 1.22\n"
+	source := `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	skipNext := false
+	for _, key := range os.Args[1:] {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if key == "--chdir" {
+			skipNext = true
+			continue
+		}
+		fmt.Printf("%s=%s\n", key, os.Getenv(key))
+	}
+}
+`
+
+	sourcePath := filepath.Join(sourceDir, "main.go")
+	if err := os.WriteFile(sourcePath, []byte(source), 0o600); err != nil {
+		t.Fatalf("write fake env main.go: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "go.mod"), []byte(goMod), 0o600); err != nil {
+		t.Fatalf("write fake env go.mod: %v", err)
+	}
+
+	outputName := "bus-" + subcommand
+	if runtime.GOOS == "windows" {
+		outputName += ".exe"
+	}
+	outputPath := filepath.Join(targetDir, outputName)
+
+	cmd := exec.Command("go", "build", "-o", outputPath)
+	cmd.Dir = sourceDir
+	cmd.Env = os.Environ()
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build failed: %v\n%s", err, string(output))
+	}
+
+	return outputPath
+}
+
 func setEnv(env []string, key, value string) []string {
 	prefix := key + "="
 	updated := make([]string, 0, len(env)+1)
@@ -815,6 +953,32 @@ func TestRunBusfileExecutesCommands(t *testing.T) {
 	if !strings.Contains(got, "LEDGER:post --id m2\n") {
 		t.Fatalf("expected ledger invocation, got %q", got)
 	}
+}
+
+func TestRunBusfileLoadsDotenvForCommands(t *testing.T) {
+	tempDir := t.TempDir()
+	buildFakeEnvSubcommand(t, tempDir, "env")
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, ".env"), []byte("BUS_DOTENV_BUSFILE=loaded\n"), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	busfile := filepath.Join(workspace, "batch.bus")
+	if err := os.WriteFile(busfile, []byte("env BUS_DOTENV_BUSFILE\n"), 0o600); err != nil {
+		t.Fatalf("write busfile: %v", err)
+	}
+	env := prependPath(os.Environ(), tempDir)
+
+	withChdir(t, workspace, func() {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus", busfile}, env, nil, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+		}
+		if stdout.String() != "BUS_DOTENV_BUSFILE=loaded\n" {
+			t.Fatalf("expected dotenv value in busfile command, got %q", stdout.String())
+		}
+	})
 }
 
 func TestRunBusfileStickyGlobalDirectivesApplyAndOverride(t *testing.T) {

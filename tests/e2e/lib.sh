@@ -73,6 +73,24 @@ printf 'JOURNAL:%s\n' "$*"
 SH
   chmod +x "$WS/path_first/bus-journal"
 
+  cat > "$WS/path_first/bus-env" <<'SH'
+#!/bin/sh
+skip_next=0
+for key in "$@"; do
+  if [ "$skip_next" = "1" ]; then
+    skip_next=0
+    continue
+  fi
+  if [ "$key" = "--chdir" ]; then
+    skip_next=1
+    continue
+  fi
+  eval "value=\${$key-}"
+  printf '%s=%s\n' "$key" "$value"
+done
+SH
+  chmod +x "$WS/path_first/bus-env"
+
   cat > "$WS/path_first/bus-nonexec" <<'TXT'
 ignored
 TXT

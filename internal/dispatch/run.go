@@ -30,6 +30,11 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 		return 2
 	}
 	if busfileMode {
+		env, err = loadWorkingDirDotenv(env, busfileOpts.workdir)
+		if err != nil {
+			fmt.Fprintf(stderr, "bus: failed to load .env: %v\n", err)
+			return 2
+		}
 		return runBusfiles(busfileOpts, env, stdin, stdout, stderr)
 	}
 
@@ -37,6 +42,11 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 	if err != nil {
 		fmt.Fprintf(stderr, "bus: invalid usage: %v\n", err)
 		writeUsage(env, stderr)
+		return 2
+	}
+	env, err = loadWorkingDirDotenv(env, parsed.globals.Chdir)
+	if err != nil {
+		fmt.Fprintf(stderr, "bus: failed to load .env: %v\n", err)
 		return 2
 	}
 	if parsed.help {
@@ -534,7 +544,7 @@ func parseBusfileMode(args []string) (busfileOptions, bool, error) {
 
 func runBusfiles(opts busfileOptions, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	registerTestBusfileRunners(env)
-	cfg := loadBusfileConfig()
+	cfg := loadBusfileConfig(env)
 	return runWithinWorkdir(opts.workdir, stderr, func() int {
 		return runBusfilesWithExecutor(opts, env, stdin, stdout, stderr, cfg)
 	})
@@ -1962,7 +1972,9 @@ func isValidTransaction(value string) bool {
 	}
 }
 
-func loadBusfileConfig() busfileConfig {
+// loadBusfileConfig collects busfile defaults from workspace and preference config.
+// Used by: runBusfiles before executing parsed .bus command batches.
+func loadBusfileConfig(env []string) busfileConfig {
 	cfg := busfileConfig{
 		transactionProvider: "none",
 		transactionScope:    "file",
@@ -1971,7 +1983,7 @@ func loadBusfileConfig() busfileConfig {
 		shellLookupEnabled:  true,
 	}
 	applyDatapackageConfig(&cfg)
-	applyPreferencesConfig(&cfg)
+	applyPreferencesConfig(&cfg, env)
 	return cfg
 }
 
@@ -2021,8 +2033,10 @@ func applyDatapackageConfig(cfg *busfileConfig) {
 	}
 }
 
-func applyPreferencesConfig(cfg *busfileConfig) {
-	path := preferencesPath()
+// applyPreferencesConfig overlays Bus preference file values onto busfile config.
+// Used by: loadBusfileConfig after datapackage config.
+func applyPreferencesConfig(cfg *busfileConfig, env []string) {
+	path := preferencesPath(env)
 	if path == "" {
 		return
 	}
@@ -2030,21 +2044,21 @@ func applyPreferencesConfig(cfg *busfileConfig) {
 	if err != nil {
 		return
 	}
-	var env struct {
+	var envelope struct {
 		Values map[string]json.RawMessage `json:"values"`
 	}
-	if err := json.Unmarshal(data, &env); err != nil {
+	if err := json.Unmarshal(data, &envelope); err != nil {
 		return
 	}
-	if len(env.Values) == 0 {
+	if len(envelope.Values) == 0 {
 		return
 	}
-	applyPreferencesObject(env.Values["bus.busfile"], cfg)
-	readPrefString(env.Values, "bus.busfile.transaction.provider", &cfg.transactionProvider)
-	readPrefString(env.Values, "bus.busfile.transaction.scope", &cfg.transactionScope)
-	readPrefBool(env.Values, "bus.busfile.transaction.fallback_to_none", &cfg.fallbackToNone)
-	readPrefString(env.Values, "bus.busfile.validation.level", &cfg.validationLevel)
-	readPrefBool(env.Values, "bus.busfile.dispatch.shell_lookup_enabled", &cfg.shellLookupEnabled)
+	applyPreferencesObject(envelope.Values["bus.busfile"], cfg)
+	readPrefString(envelope.Values, "bus.busfile.transaction.provider", &cfg.transactionProvider)
+	readPrefString(envelope.Values, "bus.busfile.transaction.scope", &cfg.transactionScope)
+	readPrefBool(envelope.Values, "bus.busfile.transaction.fallback_to_none", &cfg.fallbackToNone)
+	readPrefString(envelope.Values, "bus.busfile.validation.level", &cfg.validationLevel)
+	readPrefBool(envelope.Values, "bus.busfile.dispatch.shell_lookup_enabled", &cfg.shellLookupEnabled)
 }
 
 func applyPreferencesObject(raw json.RawMessage, cfg *busfileConfig) {
@@ -2104,23 +2118,26 @@ func readPrefBool(values map[string]json.RawMessage, key string, dest *bool) {
 	*dest = value
 }
 
-func preferencesPath() string {
-	if p := os.Getenv("BUS_PREFERENCES_PATH"); p != "" {
+// preferencesPath resolves the Bus preferences path from environment defaults.
+// Used by: applyPreferencesConfig.
+func preferencesPath(env []string) string {
+	if p, ok := lookupEnv(env, "BUS_PREFERENCES_PATH"); ok && p != "" {
 		return p
 	}
 	if runtime.GOOS == "windows" {
-		dir := os.Getenv("APPDATA")
+		dir, _ := lookupEnv(env, "APPDATA")
 		if dir == "" {
-			dir = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming")
+			profile, _ := lookupEnv(env, "USERPROFILE")
+			dir = filepath.Join(profile, "AppData", "Roaming")
 		}
 		if dir == "" {
 			return ""
 		}
 		return filepath.Join(dir, "BusDK", "preferences.json")
 	}
-	dir := os.Getenv("XDG_CONFIG_HOME")
+	dir, _ := lookupEnv(env, "XDG_CONFIG_HOME")
 	if dir == "" {
-		home := os.Getenv("HOME")
+		home, _ := lookupEnv(env, "HOME")
 		if home == "" {
 			return ""
 		}
@@ -2241,6 +2258,7 @@ Usage:
 
 Behavior:
   Dispatches bus-<command> from PATH and passes the remaining arguments through unchanged.
+  Loads .env from the effective working directory when present; process environment wins.
   Tip: use `+"`bus shell`"+` for interactive command entry.
 
 Global flags:
@@ -2290,6 +2308,156 @@ func withPerfEnv(env []string, perf bool) []string {
 	}
 	if !replaced {
 		out = append(out, "BUS_PERF=1")
+	}
+	return out
+}
+
+// dotenvEntry stores one parsed .env assignment.
+// Used by: parseDotenv and overlayDotenvEnv while loading the dispatcher environment.
+type dotenvEntry struct {
+	key   string
+	value string
+}
+
+// loadWorkingDirDotenv overlays a working-directory .env file onto the environment when present.
+// Used by: Run before normal dispatch and busfile execution.
+func loadWorkingDirDotenv(env []string, workdir string) ([]string, error) {
+	path := ".env"
+	if workdir != "" {
+		path = filepath.Join(workdir, ".env")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return env, nil
+		}
+		return env, err
+	}
+	entries, err := parseDotenv(path, string(data))
+	if err != nil {
+		return env, err
+	}
+	return overlayDotenvEnv(env, entries), nil
+}
+
+// parseDotenv parses the deterministic dotenv subset used by Bus CLI entrypoints.
+// Used by: loadWorkingDirDotenv.
+func parseDotenv(path string, data string) ([]dotenvEntry, error) {
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	entries := []dotenvEntry{}
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		eq := strings.Index(line, "=")
+		if eq < 0 {
+			return nil, fmt.Errorf("%s:%d: expected KEY=VALUE", path, lineNo)
+		}
+		key := strings.TrimSpace(line[:eq])
+		if !validEnvName(key) {
+			return nil, fmt.Errorf("%s:%d: invalid environment variable name %q", path, lineNo, key)
+		}
+		valueText := strings.TrimSpace(line[eq+1:])
+		value, err := parseDotenvValue(valueText)
+		if err != nil {
+			return nil, fmt.Errorf("%s:%d: %v", path, lineNo, err)
+		}
+		entries = append(entries, dotenvEntry{key: key, value: value})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// parseDotenvValue parses one dotenv value after KEY=.
+// Used by: parseDotenv.
+func parseDotenvValue(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	switch value[0] {
+	case '"':
+		if len(value) < 2 || value[len(value)-1] != '"' {
+			return "", fmt.Errorf("unterminated double-quoted value")
+		}
+		unquoted, err := strconv.Unquote(value)
+		if err != nil {
+			return "", fmt.Errorf("invalid double-quoted value: %v", err)
+		}
+		return unquoted, nil
+	case '\'':
+		if len(value) < 2 || value[len(value)-1] != '\'' {
+			return "", fmt.Errorf("unterminated single-quoted value")
+		}
+		return value[1 : len(value)-1], nil
+	default:
+		return trimDotenvInlineComment(value), nil
+	}
+}
+
+// trimDotenvInlineComment removes unquoted comments from a dotenv value.
+// Used by: parseDotenvValue.
+func trimDotenvInlineComment(value string) string {
+	for i, r := range value {
+		if r != '#' {
+			continue
+		}
+		if i == 0 || unicode.IsSpace(rune(value[i-1])) {
+			return strings.TrimSpace(value[:i])
+		}
+	}
+	return strings.TrimSpace(value)
+}
+
+// validEnvName reports whether a dotenv key is a portable environment variable name.
+// Used by: parseDotenv.
+func validEnvName(key string) bool {
+	if key == "" {
+		return false
+	}
+	for i, r := range key {
+		valid := r == '_' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || i > 0 && r >= '0' && r <= '9'
+		if !valid || i == 0 && r >= '0' && r <= '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// overlayDotenvEnv appends dotenv values without replacing keys already in the process environment.
+// Used by: loadWorkingDirDotenv.
+func overlayDotenvEnv(env []string, entries []dotenvEntry) []string {
+	if len(entries) == 0 {
+		return env
+	}
+	existing := make(map[string]struct{}, len(env))
+	for _, entry := range env {
+		if eq := strings.Index(entry, "="); eq > 0 {
+			existing[entry[:eq]] = struct{}{}
+		}
+	}
+	values := make(map[string]string, len(entries))
+	order := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if _, ok := existing[entry.key]; ok {
+			continue
+		}
+		if _, ok := values[entry.key]; !ok {
+			order = append(order, entry.key)
+		}
+		values[entry.key] = entry.value
+	}
+	if len(order) == 0 {
+		return env
+	}
+	out := append([]string{}, env...)
+	for _, key := range order {
+		out = append(out, key+"="+values[key])
 	}
 	return out
 }
