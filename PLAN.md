@@ -4,6 +4,8 @@
 
 - [x] Add dispatcher `.env` loading end to end: load a working-directory `.env` file once in `bus` before dispatch, overlay its values into the child/module environment without overriding already-set process environment variables, support deterministic dotenv parsing diagnostics, cover normal dispatch plus dispatcher `-C` effective working-directory behavior with unit and e2e tests, update README/help-facing docs as needed, and verify with `make test`, `make e2e`, and `make check`.
 
+- [x] Re-verify dispatcher `.env` loading is generic end to end: prove the `bus` dispatcher parses arbitrary valid environment variable names, not only Bus-prefixed keys, preserves process-environment precedence, avoids module-specific filtering, updates README/help/docs only if behavior text is missing, adds unit and e2e coverage for non-Bus keys, and runs module plus root gates.
+
 - [x] Restore direct dispatcher ownership for nested operator commands end to end: make `bus operator ...` dispatch only to `bus-operator` and let `bus-operator` call focused `bus-operator-*` Go libraries; remove longest-prefix/fallback execution of nested child binaries from the root dispatcher; update e2e coverage and perf expectations; and verify with `make test`, `make e2e`, and `make quality`.
 
 - [x] Superseded the earlier hierarchical module dispatch experiment in `bus`: root dispatch now stays first-word only, so nested families such as `bus operator billing ...` are owned by `bus-operator` and focused submodule behavior is reached through parent-owned Go library dispatch rather than root-dispatcher child-binary fallback.

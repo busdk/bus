@@ -261,6 +261,7 @@ func TestRunLoadsDotenvForDispatchedCommand(t *testing.T) {
 		"export BUS_DOTENV_EXPORTED=exported",
 		"BUS_DOTENV_SPACED = spaced value",
 		"BUS_DOTENV_EXISTING=from-dotenv",
+		"GENERIC_DOTENV_VALUE=generic",
 		"",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(workspace, ".env"), []byte(dotenv), 0o600); err != nil {
@@ -272,7 +273,7 @@ func TestRunLoadsDotenvForDispatchedCommand(t *testing.T) {
 	withChdir(t, workspace, func() {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
-		code := dispatch.Run([]string{"bus", "env", "BUS_DOTENV_LOADED", "BUS_DOTENV_EXPORTED", "BUS_DOTENV_SPACED", "BUS_DOTENV_EXISTING"}, env, nil, &stdout, &stderr)
+		code := dispatch.Run([]string{"bus", "env", "BUS_DOTENV_LOADED", "BUS_DOTENV_EXPORTED", "BUS_DOTENV_SPACED", "BUS_DOTENV_EXISTING", "GENERIC_DOTENV_VALUE"}, env, nil, &stdout, &stderr)
 		if code != 0 {
 			t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
 		}
@@ -281,6 +282,7 @@ func TestRunLoadsDotenvForDispatchedCommand(t *testing.T) {
 			"BUS_DOTENV_EXPORTED=exported",
 			"BUS_DOTENV_SPACED=spaced value",
 			"BUS_DOTENV_EXISTING=from-process",
+			"GENERIC_DOTENV_VALUE=generic",
 			"",
 		}, "\n")
 		if stdout.String() != want {

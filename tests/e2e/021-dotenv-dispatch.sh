@@ -10,10 +10,11 @@ BUS_E2E_DOTENV=loaded
 export BUS_E2E_DOTENV_EXPORTED=exported
 BUS_E2E_DOTENV_SPACED = spaced value
 BUS_E2E_DOTENV_EXISTING=from-dotenv
+GENERIC_E2E_DOTENV=generic
 ENV
 
-(cd "$WS" && PATH="$TEST_PATH" BUS_E2E_DOTENV_EXISTING=from-process "$BIN" env BUS_E2E_DOTENV BUS_E2E_DOTENV_EXPORTED BUS_E2E_DOTENV_SPACED BUS_E2E_DOTENV_EXISTING > "$WS/dotenv.out" 2> "$WS/dotenv.err")
-diff -u <(printf 'BUS_E2E_DOTENV=loaded\nBUS_E2E_DOTENV_EXPORTED=exported\nBUS_E2E_DOTENV_SPACED=spaced value\nBUS_E2E_DOTENV_EXISTING=from-process\n') "$WS/dotenv.out"
+(cd "$WS" && PATH="$TEST_PATH" BUS_E2E_DOTENV_EXISTING=from-process "$BIN" env BUS_E2E_DOTENV BUS_E2E_DOTENV_EXPORTED BUS_E2E_DOTENV_SPACED BUS_E2E_DOTENV_EXISTING GENERIC_E2E_DOTENV > "$WS/dotenv.out" 2> "$WS/dotenv.err")
+diff -u <(printf 'BUS_E2E_DOTENV=loaded\nBUS_E2E_DOTENV_EXPORTED=exported\nBUS_E2E_DOTENV_SPACED=spaced value\nBUS_E2E_DOTENV_EXISTING=from-process\nGENERIC_E2E_DOTENV=generic\n') "$WS/dotenv.out"
 ! test -s "$WS/dotenv.err"
 
 mkdir -p "$WS/app"
