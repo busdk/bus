@@ -1,5 +1,6 @@
 # bus plan
 
+- [ ] Migrate this CLI to shared Bus diagnostic flag support end to end: use `bus-help/pkg/diagnostics` for standard TRACE, DEBUG, INFO, WARN, and ERROR levels; map default INFO, one `-v`/`--verbose` to DEBUG, `-vv`/repeated verbose/`--trace` to TRACE, and `--quiet` to ERROR-only output; update help/OpenCLI metadata, add focused flag/logging tests, and verify the module's standard gates.
 - [x] Complete module-owned OpenCLI help metadata end to end: expose `bus help --format opencli` and module-local structured help through shared `bus-help` OpenCLI helpers where applicable; describe commands, subcommands, options, arguments, examples, exit codes, and every module-owned environment variable under `io.busdk.environment` with schema/default/secret safe-handling metadata consumable by `bus configure`; preserve existing human help and compatibility output; add unit plus e2e coverage including `bus help --format opencli bus` or the dispatcher-appropriate equivalent; update README/docs; and verify the module plus scoped superproject gates.
 
 ## Active feature plan
