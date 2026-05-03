@@ -79,8 +79,9 @@ PATH="$TEST_PATH" "$BIN" help > "$WS/help.out" 2> "$WS/help.err"
 help_code=$?
 set -e
 
-test "$help_code" -eq 2
-! test -s "$WS/help.out"
-diff -u "$WS/expected_usage.err" "$WS/help.err"
+test "$help_code" -eq 0
+grep -q '^bus exposes live dispatcher metadata\.$' "$WS/help.out"
+grep -q '^  bus help \[--format text|opencli|json\]$' "$WS/help.out"
+! test -s "$WS/help.err"
 
 echo "e2e OK"

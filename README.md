@@ -215,3 +215,11 @@ Run all checks:
 ```sh
 make check
 ```
+## Machine-Readable Help
+
+Live OpenCLI-compatible metadata is available on stdout and includes Bus `io.busdk.environment` metadata for `bus configure`:
+
+```sh
+bus help --format opencli
+```
+

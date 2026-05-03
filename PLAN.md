@@ -1,5 +1,7 @@
 # bus plan
 
+- [x] Complete module-owned OpenCLI help metadata end to end: expose `bus help --format opencli` and module-local structured help through shared `bus-help` OpenCLI helpers where applicable; describe commands, subcommands, options, arguments, examples, exit codes, and every module-owned environment variable under `io.busdk.environment` with schema/default/secret safe-handling metadata consumable by `bus configure`; preserve existing human help and compatibility output; add unit plus e2e coverage including `bus help --format opencli bus` or the dispatcher-appropriate equivalent; update README/docs; and verify the module plus scoped superproject gates.
+
 ## Active feature plan
 
 - [x] Add dispatcher `.env` loading end to end: load a working-directory `.env` file once in `bus` before dispatch, overlay its values into the child/module environment without overriding already-set process environment variables, support deterministic dotenv parsing diagnostics, cover normal dispatch plus dispatcher `-C` effective working-directory behavior with unit and e2e tests, update README/help-facing docs as needed, and verify with `make test`, `make e2e`, and `make check`.
