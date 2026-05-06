@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 	"unicode"
+
+	"github.com/busdk/bus-help/pkg/diagnostics"
 )
 
 const version = "dev"
@@ -56,6 +58,11 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 	if parsed.version {
 		fmt.Fprintf(stdout, "bus %s\n", version)
 		return 0
+	}
+	if _, err := parsed.globals.diagnosticLevel(); err != nil {
+		fmt.Fprintf(stderr, "bus: invalid usage: %v\n", err)
+		writeUsage(env, stderr)
+		return 2
 	}
 	if parsed.subcommand == "" {
 		writeUsage(env, stderr)
@@ -282,6 +289,8 @@ type globalFlagState struct {
 	ColorModeSet  bool
 	Perf          bool
 	PerfSet       bool
+	Trace         bool
+	TraceSet      bool
 	Verbosity     int
 	VerbositySet  bool
 	Chdir         string
@@ -353,11 +362,16 @@ func (s *globalFlagState) applyToken(flag string, value string) error {
 	case "--no-perf":
 		s.Perf = false
 		s.PerfSet = true
+	case "--trace":
+		s.Trace = true
+		s.TraceSet = true
 	case "-v", "--verbose":
 		s.Verbosity++
 		s.VerbositySet = true
 	case "--no-verbose":
 		s.Verbosity = 0
+		s.Trace = false
+		s.TraceSet = true
 		s.VerbositySet = true
 	default:
 		return fmt.Errorf("unknown flag %s", flag)
@@ -378,6 +392,9 @@ func (s globalFlagState) renderArgs() []string {
 		} else {
 			args = append(args, "--color", s.ColorMode)
 		}
+	}
+	if s.Trace {
+		args = append(args, "--trace")
 	}
 	for i := 0; i < s.Verbosity; i++ {
 		args = append(args, "-v")
@@ -402,6 +419,8 @@ func (s globalFlagState) isZero() bool {
 		!s.ColorModeSet &&
 		!s.Perf &&
 		!s.PerfSet &&
+		!s.Trace &&
+		!s.TraceSet &&
 		s.Verbosity == 0 &&
 		!s.VerbositySet &&
 		!s.ChdirTouched &&
@@ -425,6 +444,10 @@ func (s globalFlagState) merge(overlay globalFlagState) globalFlagState {
 		out.Perf = overlay.Perf
 		out.PerfSet = true
 	}
+	if overlay.TraceSet {
+		out.Trace = overlay.Trace
+		out.TraceSet = true
+	}
 	if overlay.VerbositySet {
 		out.Verbosity = overlay.Verbosity
 		out.VerbositySet = true
@@ -445,6 +468,12 @@ func (s globalFlagState) merge(overlay globalFlagState) globalFlagState {
 		out.FormatTouched = true
 	}
 	return out
+}
+
+// diagnosticLevel maps dispatcher-global diagnostics to the shared Bus threshold.
+// Used by: Run and timing log helpers before emitting dispatcher diagnostics.
+func (s globalFlagState) diagnosticLevel() (diagnostics.Level, error) {
+	return diagnostics.LevelFor(s.Quiet, s.Trace, s.Verbosity)
 }
 
 func (e busfileError) Error() string {
@@ -1687,7 +1716,16 @@ func collectBusfileCommandsWithState(path string, stack map[string]bool, command
 			}
 		}
 		if parsed.subcommand == "" && !parsed.globals.isZero() {
-			*sticky = sticky.merge(parsed.globals)
+			merged := sticky.merge(parsed.globals)
+			if _, err := merged.diagnosticLevel(); err != nil {
+				return busfileError{
+					File:     path,
+					Line:     logicalStart,
+					Message:  "syntax error: " + err.Error(),
+					ExitCode: 65,
+				}
+			}
+			*sticky = merged
 			continue
 		}
 		*commands = append(*commands, busfileCommand{
@@ -2179,6 +2217,7 @@ type parseResult struct {
 }
 
 func parseGlobalFlags(args []string) (parseResult, error) {
+	args = diagnostics.ExpandVerbosityArgs(args)
 	parsed := parseResult{}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -2197,15 +2236,9 @@ func parseGlobalFlags(args []string) (parseResult, error) {
 		case arg == "-V" || arg == "--version":
 			parsed.version = true
 			return parsed, nil
-		case arg == "--no-quiet" || arg == "--no-perf" || arg == "--no-verbose" || arg == "--no-chdir" || arg == "--no-output" || arg == "--no-format" || arg == "-q" || arg == "--quiet" || arg == "--no-color" || arg == "--perf" || arg == "-v" || arg == "--verbose":
+		case arg == "--no-quiet" || arg == "--no-perf" || arg == "--no-verbose" || arg == "--no-chdir" || arg == "--no-output" || arg == "--no-format" || arg == "-q" || arg == "--quiet" || arg == "--no-color" || arg == "--perf" || arg == "--trace" || arg == "-v" || arg == "--verbose":
 			if err := parsed.globals.applyToken(arg, ""); err != nil {
 				return parsed, err
-			}
-		case strings.HasPrefix(arg, "-") && len(arg) > 2 && strings.Trim(arg[1:], "v") == "":
-			for range len(arg[1:]) {
-				if err := parsed.globals.applyToken("-v", ""); err != nil {
-					return parsed, err
-				}
 			}
 		case strings.HasPrefix(arg, "--color="):
 			if err := parsed.globals.applyToken("--color", strings.TrimPrefix(arg, "--color=")); err != nil {
@@ -2264,11 +2297,12 @@ Behavior:
 Global flags:
   -h, --help           Show help and exit
   -V, --version        Show version and exit
-  -v, --verbose        Increase stderr verbosity
-      --no-verbose     Disable verbose mode
+  -v, --verbose        Increase diagnostics to DEBUG; repeat for TRACE
+      --trace          Enable TRACE diagnostics; equivalent to -vv
+      --no-verbose     Disable verbose and trace mode
       --perf           Ask child command to emit timing lines
       --no-perf        Disable perf forwarding
-  -q, --quiet          Suppress normal output
+  -q, --quiet          Suppress non-ERROR diagnostics
       --no-quiet       Disable quiet mode
   -C, --chdir <dir>    Change working directory before dispatch
       --no-chdir       Clear earlier --chdir
@@ -2465,13 +2499,8 @@ func overlayDotenvEnv(env []string, entries []dotenvEntry) []string {
 // logCommandDuration emits one deterministic timing line for a completed dispatched command.
 // Used by: Run after child command completion and failure paths.
 func logCommandDuration(stderr io.Writer, parsed parseResult, d time.Duration) {
-	level := ""
-	switch {
-	case parsed.globals.Perf:
-		level = "INFO"
-	case parsed.globals.Verbosity > 0:
-		level = "DEBUG"
-	default:
+	level, ok := timingDiagnosticLevel(parsed.globals)
+	if !ok {
 		return
 	}
 	moduleName := "bus-" + parsed.subcommand
@@ -2482,19 +2511,14 @@ func logCommandDuration(stderr io.Writer, parsed parseResult, d time.Duration) {
 			break
 		}
 	}
-	fmt.Fprintf(stderr, "%s perf %s %s %s\n", level, moduleName, op, d.String())
+	fmt.Fprintf(stderr, "%s perf %s %s %s\n", level.String(), moduleName, op, d.String())
 }
 
 // logBusfileCommandDuration emits one deterministic timing line for a completed busfile command.
 // Used by: executeBusfileCommands and executeFSUnit after each dispatched busfile command.
 func logBusfileCommandDuration(stderr io.Writer, command busfileCommand, d time.Duration) {
-	level := ""
-	switch {
-	case command.Globals.Perf:
-		level = "INFO"
-	case command.Globals.Verbosity > 0:
-		level = "DEBUG"
-	default:
+	level, ok := timingDiagnosticLevel(command.Globals)
+	if !ok {
 		return
 	}
 	if len(command.Argv) == 0 {
@@ -2508,7 +2532,27 @@ func logBusfileCommandDuration(stderr io.Writer, command busfileCommand, d time.
 			break
 		}
 	}
-	fmt.Fprintf(stderr, "%s perf %s %s %s\n", level, moduleName, op, d.String())
+	fmt.Fprintf(stderr, "%s perf %s %s %s\n", level.String(), moduleName, op, d.String())
+}
+
+// timingDiagnosticLevel chooses the severity for dispatcher timing diagnostics.
+// Used by: logCommandDuration and logBusfileCommandDuration.
+func timingDiagnosticLevel(globals globalFlagState) (diagnostics.Level, bool) {
+	level, err := globals.diagnosticLevel()
+	if err != nil {
+		return diagnostics.LevelError, false
+	}
+	if globals.Perf {
+		return diagnostics.LevelInfo, level.Enabled(diagnostics.LevelInfo)
+	}
+	switch {
+	case globals.Trace || globals.Verbosity > 1:
+		return diagnostics.LevelTrace, level.Enabled(diagnostics.LevelTrace)
+	case globals.Verbosity == 1:
+		return diagnostics.LevelDebug, level.Enabled(diagnostics.LevelDebug)
+	default:
+		return diagnostics.LevelInfo, false
+	}
 }
 
 // Issue: https://github.com/busdk/bus/issues/2 - enumerate bus-* executables on PATH.

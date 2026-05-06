@@ -118,6 +118,12 @@ This module forwards subcommand global flags such as `--color`, `--format`,
 accepts dispatcher-level `--perf`, which enables timing output for the
 dispatched command and sets `BUS_PERF=1` for instrumented modules.
 
+Dispatcher diagnostics use the shared Bus levels `ERROR`, `WARN`, `INFO`,
+`DEBUG`, and `TRACE`. Default output uses `INFO`; one `-v` or `--verbose`
+enables `DEBUG`; repeated verbosity such as `-vv` or `--verbose --verbose`
+enables `TRACE`; `--trace` is equivalent to TRACE; and `--quiet` keeps only
+ERROR diagnostics. `--quiet` cannot be combined with verbose or trace mode.
+
 In `.bus` files, a line that contains only dispatcher global flags becomes a
 sticky directive for following commands in the same session. The same parser is
 used as in normal dispatch, so later single-value flags override earlier ones.
@@ -133,7 +139,8 @@ ledger beta
 ```
 
 Reset directives are supported for sticky state: `--no-perf`, `--no-quiet`,
-`--no-verbose`, `--no-chdir`, `--no-output`, and `--no-format`. Color already
+`--no-verbose`, `--no-chdir`, `--no-output`, and `--no-format`. `--no-verbose`
+also clears sticky trace mode. Color already
 uses `--color ...` and `--no-color`.
 
 Dispatcher-level `-C/--chdir` also applies when the invocation enters busfile
@@ -222,4 +229,3 @@ Live OpenCLI-compatible metadata is available on stdout and includes Bus `io.bus
 ```sh
 bus help --format opencli
 ```
-

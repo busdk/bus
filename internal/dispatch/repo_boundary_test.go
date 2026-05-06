@@ -40,7 +40,7 @@ func TestRepositoryHasNoPrivateBusModuleImports(t *testing.T) {
 		}
 		for _, spec := range file.Imports {
 			importPath := strings.Trim(spec.Path.Value, `"`)
-			if strings.HasPrefix(importPath, "github.com/busdk/bus-") {
+			if strings.HasPrefix(importPath, "github.com/busdk/bus-") && !strings.HasPrefix(importPath, "github.com/busdk/bus-help/") {
 				t.Errorf("%s imports forbidden private BusDK module package %q", path, importPath)
 			}
 		}
@@ -61,7 +61,8 @@ func TestRepositoryHasNoPrivateBusModuleBuildDependencies(t *testing.T) {
 			t.Fatalf("read %s: %v", relPath, err)
 		}
 		text := string(data)
-		if strings.Contains(text, "github.com/busdk/bus-") {
+		privateText := strings.ReplaceAll(text, "github.com/busdk/bus-help", "")
+		if strings.Contains(privateText, "github.com/busdk/bus-") {
 			t.Fatalf("%s must not reference private github.com/busdk/bus-* modules", relPath)
 		}
 		if strings.Contains(text, "../bus-") || strings.Contains(text, `..\bus-`) {

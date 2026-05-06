@@ -38,7 +38,6 @@ while IFS= read -r script; do
   assert_subject_unchanged
 done < <(find "${ROOT_DIR}/tests/e2e" -maxdepth 1 -type f -name '[0-9][0-9][0-9]-*.sh' | LC_ALL=C sort)
 
-OPENCLI_TEST_BIN="${BINARY:-${BIN:-${bin:-${TEST_SUBJECT:-${ROOT_DIR:-${ROOT:-${REPO_ROOT:-.}}}/bin/bus}}}}"
-"$OPENCLI_TEST_BIN" help --format opencli | grep -q '"io.busdk.environment"'
-"$OPENCLI_TEST_BIN" help --format opencli | grep -q '"title": "bus"'
+"$TEST_SUBJECT" help --format opencli | grep -q '"io.busdk.environment"'
+"$TEST_SUBJECT" help --format opencli | grep -q '"title": "bus"'
 echo "e2e.sh: PASS"

@@ -213,6 +213,76 @@ func TestRunForwardsPerfFlagBeforeSubcommand(t *testing.T) {
 	}
 }
 
+func TestRunDiagnosticVerbosityLevels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantStdout string
+		wantStderr string
+	}{
+		{name: "verbose debug", args: []string{"bus", "-v", "status", "inspect"}, wantStdout: "PRIMARY:-v inspect\n", wantStderr: "DEBUG perf bus-status inspect "},
+		{name: "repeated verbose trace", args: []string{"bus", "-vv", "status", "inspect"}, wantStdout: "PRIMARY:-v -v inspect\n", wantStderr: "TRACE perf bus-status inspect "},
+		{name: "trace flag", args: []string{"bus", "--trace", "status", "inspect"}, wantStdout: "PRIMARY:--trace inspect\n", wantStderr: "TRACE perf bus-status inspect "},
+		{name: "quiet suppresses info perf", args: []string{"bus", "--quiet", "--perf", "status", "inspect"}, wantStdout: "PRIMARY:--quiet inspect\n", wantStderr: ""},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tempDir := t.TempDir()
+			buildFakeSubcommand(t, tempDir, "status", "PRIMARY")
+			env := setEnv(os.Environ(), "PATH", tempDir)
+
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := dispatch.Run(tt.args, env, nil, &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+			}
+			if stdout.String() != tt.wantStdout {
+				t.Fatalf("unexpected delegated args: %q", stdout.String())
+			}
+			if tt.wantStderr == "" {
+				if stderr.Len() != 0 {
+					t.Fatalf("expected empty stderr, got %q", stderr.String())
+				}
+				return
+			}
+			if !strings.Contains(stderr.String(), tt.wantStderr) {
+				t.Fatalf("expected diagnostic %q, got %q", tt.wantStderr, stderr.String())
+			}
+		})
+	}
+}
+
+func TestRunRejectsConflictingDiagnosticFlags(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "status", "PRIMARY")
+	env := setEnv(os.Environ(), "PATH", tempDir)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", "--quiet", "--trace", "status"}, env, nil, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "--quiet and --verbose/--trace are mutually exclusive") {
+		t.Fatalf("expected diagnostic conflict, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "usage: bus <command> [args...]") {
+		t.Fatalf("expected usage after conflict, got %q", stderr.String())
+	}
+}
+
 func TestRunDoubleDashTerminatesGlobalParsing(t *testing.T) {
 	t.Parallel()
 
@@ -816,7 +886,7 @@ func main() {
 
 	cmd := exec.Command("go", "build", "-o", outputPath)
 	cmd.Dir = sourceDir
-	cmd.Env = os.Environ()
+	cmd.Env = append(os.Environ(), "GOFLAGS="+strings.TrimSpace(os.Getenv("GOFLAGS")+" -buildvcs=false"))
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build failed: %v\n%s", err, string(output))
 	}
@@ -868,7 +938,7 @@ func main() {
 
 	cmd := exec.Command("go", "build", "-o", outputPath)
 	cmd.Dir = sourceDir
-	cmd.Env = os.Environ()
+	cmd.Env = append(os.Environ(), "GOFLAGS="+strings.TrimSpace(os.Getenv("GOFLAGS")+" -buildvcs=false"))
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build failed: %v\n%s", err, string(output))
 	}
@@ -1046,6 +1116,42 @@ func TestRunBusfileStickyGlobalDirectivesApplyAndOverride(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "INFO perf bus-accounts gamma ") {
 		t.Fatalf("did not expect perf line after --no-perf, got %q", stderr.String())
+	}
+}
+
+func TestRunBusfileStickyTraceDirectiveUsesSharedDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buildFakeSubcommand(t, tempDir, "accounts", "ACCOUNTS")
+
+	busfile := filepath.Join(tempDir, "trace-sticky.bus")
+	content := strings.Join([]string{
+		"--trace",
+		"accounts alpha",
+		"--no-verbose",
+		"accounts beta",
+		"",
+	}, "\n")
+	if err := os.WriteFile(busfile, []byte(content), 0o600); err != nil {
+		t.Fatalf("write busfile: %v", err)
+	}
+
+	env := prependPath(os.Environ(), tempDir)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := dispatch.Run([]string{"bus", busfile}, env, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", code, stderr.String())
+	}
+	if stdout.String() != "ACCOUNTS:--trace alpha\nACCOUNTS:beta\n" {
+		t.Fatalf("unexpected delegated args: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "TRACE perf bus-accounts alpha ") {
+		t.Fatalf("expected trace timing line, got %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "bus-accounts beta") {
+		t.Fatalf("did not expect timing after --no-verbose, got %q", stderr.String())
 	}
 }
 

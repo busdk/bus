@@ -105,8 +105,12 @@ func metadataDocument() openCLIDocument {
 			Options: []openCLIOption{
 				{Name: "--help", Aliases: []string{"-h"}, Description: "Show help and exit."},
 				{Name: "--version", Aliases: []string{"-V"}, Description: "Print version information and exit."},
+				{Name: "--verbose", Aliases: []string{"-v"}, Description: "Increase diagnostics to DEBUG; repeat for TRACE."},
+				{Name: "--trace", Description: "Enable TRACE diagnostics; equivalent to -vv."},
+				{Name: "--quiet", Aliases: []string{"-q"}, Description: "Suppress non-ERROR diagnostics."},
 				{Name: "--chdir", Aliases: []string{"-C"}, ValueName: "dir", Description: "Set effective working directory."},
 				{Name: "--format", Aliases: []string{"-f"}, ValueName: "format", Description: "Select output format where supported."},
+				{Name: "--perf", Description: "Emit dispatcher timing diagnostics at INFO level unless quiet mode is active."},
 			},
 			Examples: []openCLIExample{
 				{Summary: "Show dispatcher metadata.", Command: "bus help --format opencli"},

@@ -17,3 +17,19 @@ func TestMetadataDocumentIncludesEnvironmentMetadata(t *testing.T) {
 		t.Fatalf("metadata document is not JSON serializable: %v", err)
 	}
 }
+
+func TestMetadataDocumentIncludesDiagnosticOptions(t *testing.T) {
+	doc := metadataDocument()
+	if len(doc.Commands) == 0 {
+		t.Fatal("missing command metadata")
+	}
+	options := map[string]bool{}
+	for _, option := range doc.Commands[0].Options {
+		options[option.Name] = true
+	}
+	for _, name := range []string{"--verbose", "--trace", "--quiet", "--perf"} {
+		if !options[name] {
+			t.Fatalf("missing diagnostic option %s", name)
+		}
+	}
+}
