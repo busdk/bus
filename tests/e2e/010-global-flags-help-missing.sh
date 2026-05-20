@@ -9,12 +9,12 @@ usage: bus <command> [args...]
 tip: did you mean `bus shell`?
 
 available commands:
-  accounts
-  env
-  fail
-  journal
-  ledger
-  status
+  bus accounts           Run bus-accounts from PATH
+  bus env                Run bus-env from PATH
+  bus fail               Run bus-fail from PATH
+  bus journal            Run bus-journal from PATH
+  bus ledger             Run bus-ledger from PATH
+  bus status             Run bus-status from PATH
 EOF_EXPECT_USAGE
 
 set +e
@@ -33,12 +33,12 @@ usage: bus <command> [args...]
 tip: did you mean `bus shell`?
 
 available commands:
-  accounts
-  env
-  fail
-  journal
-  ledger
-  status
+  bus accounts           Run bus-accounts from PATH
+  bus env                Run bus-env from PATH
+  bus fail               Run bus-fail from PATH
+  bus journal            Run bus-journal from PATH
+  bus ledger             Run bus-ledger from PATH
+  bus status             Run bus-status from PATH
 EOF_EXPECT_MISSING
 
 set +e
@@ -56,6 +56,7 @@ grep -q '^Usage:$' "$WS/help_global.out"
 grep -q '^  bus \[global flags\] <command> \[args...\]$' "$WS/help_global.out"
 grep -q '^  -C, --chdir <dir>    Change working directory before dispatch$' "$WS/help_global.out"
 grep -q '^Available commands:$' "$WS/help_global.out"
+grep -q '^  bus accounts \+Run bus-accounts from PATH$' "$WS/help_global.out"
 ! test -s "$WS/help_global.err"
 
 PATH="$TEST_PATH" "$BIN" --version > "$WS/version_global.out" 2> "$WS/version_global.err"

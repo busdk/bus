@@ -154,6 +154,9 @@ func TestRunGlobalHelpShortCircuits(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Available commands:") {
 		t.Fatalf("expected available commands in help, got %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "bus accounts") || !strings.Contains(stdout.String(), "Run bus-accounts from PATH") {
+		t.Fatalf("expected copyable described command entry, got %q", stdout.String())
+	}
 }
 
 func TestRunGlobalVersionShortCircuits(t *testing.T) {
@@ -768,6 +771,11 @@ func parseSubcommands(help string) []string {
 			continue
 		}
 		trimmed := strings.TrimSpace(line)
+		fields := strings.Fields(trimmed)
+		if len(fields) >= 2 && fields[0] == "bus" {
+			commands = append(commands, fields[1])
+			continue
+		}
 		commands = append(commands, trimmed)
 	}
 	return commands

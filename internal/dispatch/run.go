@@ -2277,7 +2277,7 @@ func writeUsage(env []string, stderr io.Writer) {
 	fmt.Fprintln(stderr)
 	fmt.Fprintln(stderr, "available commands:")
 	for _, name := range subcommands {
-		fmt.Fprintf(stderr, "  %s\n", name)
+		fmt.Fprintln(stderr, formatAvailableCommand(name))
 	}
 }
 
@@ -2320,8 +2320,23 @@ Global flags:
 	}
 	io.WriteString(stdout, "\nAvailable commands:\n")
 	for _, name := range subcommands {
-		fmt.Fprintf(stdout, "  %s\n", name)
+		fmt.Fprintln(stdout, formatAvailableCommand(name))
 	}
+}
+
+// formatAvailableCommand returns a copyable command row with its dispatch target.
+// Used by: writeUsage and writeHelp when rendering discovered bus-* commands.
+func formatAvailableCommand(name string) string {
+	return fmt.Sprintf("  bus %-18s %s", name, availableCommandDescription(name))
+}
+
+// availableCommandDescription describes a dispatcher-visible command family.
+// Used by: formatAvailableCommand for stable CLI help rows.
+func availableCommandDescription(name string) string {
+	if name == "audit" {
+		return "Dispatch audit evidence-coverage workflows"
+	}
+	return fmt.Sprintf("Run bus-%s from PATH", name)
 }
 
 // withPerfEnv overlays BUS_PERF=1 onto child environments when perf mode is enabled.

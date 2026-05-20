@@ -24,7 +24,7 @@ diff -u <(printf 'VALIDATE:--help evidence-coverage\n') "$WS/audit_alias_help_lo
 
 PATH="$TEST_PATH" "$BIN" --help > "$WS/help.out" 2> "$WS/help.err"
 ! test -s "$WS/help.err"
-grep -q '^  audit$' "$WS/help.out"
+grep -q '^  bus audit \+Dispatch audit evidence-coverage workflows$' "$WS/help.out"
 
 audit_code=0
 PATH="$TEST_PATH" "$BIN" audit > "$WS/audit_missing.out" 2> "$WS/audit_missing.err" || audit_code=$?
