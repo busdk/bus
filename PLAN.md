@@ -5,6 +5,8 @@
 
 ## Active feature plan
 
+- [ ] Add dispatcher release metadata and child-resolution audit support end to end: expose stable text plus JSON version metadata with module name, version, commit, and build time for the `bus` dispatcher, and provide a non-secret way for Services freshness proof to record which `bus-*` executable a dispatcher invocation resolves for commands such as `bus api` and `bus integration`. Preserve dispatcher-first service profiles and first-word dispatch semantics; add unit/e2e coverage for metadata output and resolution evidence without turning `bus` into a build/install tool.
+
 - [x] Add dispatcher `.env` loading end to end: load a working-directory `.env` file once in `bus` before dispatch, overlay its values into the child/module environment without overriding already-set process environment variables, support deterministic dotenv parsing diagnostics, cover normal dispatch plus dispatcher `-C` effective working-directory behavior with unit and e2e tests, update README/help-facing docs as needed, and verify with `make test`, `make e2e`, and `make check`.
 
 - [x] Re-verify dispatcher `.env` loading is generic end to end: prove the `bus` dispatcher parses arbitrary valid environment variable names, not only Bus-prefixed keys, preserves process-environment precedence, avoids module-specific filtering, updates README/help/docs only if behavior text is missing, adds unit and e2e coverage for non-Bus keys, and runs module plus root gates.
