@@ -127,13 +127,17 @@ func metadataDocument() openCLIDocument {
 			"io.busdk.environment": map[string]interface{}{
 				"version":      "0.1",
 				"sourceModule": "bus",
-				"precedence":   []string{".env", "process environment", "dispatcher defaults"},
+				"precedence":   []string{"process environment", ".env", "dispatcher defaults"},
 				"dotenv":       []map[string]string{{"path": ".env", "description": "Workspace environment loaded before dispatch."}},
 				"variables": []map[string]interface{}{
 					envVar("BUS_BUSFILE", "Busfile path used for dispatcher batch execution."),
 					envVar("BUS_PERF", "Enable dispatcher performance timing output."),
 					envVar("BUS_TRANSACTION_PROVIDER", "Filesystem transaction provider for Busfile execution."),
 					envVar("BUS_PREFERENCES_PATH", "Override Bus preferences path used by dispatcher workflows."),
+					envVarDefault("BUS_EVENTS_API_URL", "Local Bus Events API URL supplied to child commands when unset.", "http://127.0.0.1:8081/local/v1"),
+					envVarDefault("BUS_EVENTS_TOKEN_FILE", "Local Bus Events token file path supplied to child commands when unset.", ".bus/tokens/local-events.jwt"),
+					envVarDefault("BUS_WORKERS_API_URL", "Local Bus Workers API URL supplied to child commands when unset.", "http://127.0.0.1:8090/local/v1"),
+					envVarDefault("BUS_WORKERS_API_TOKEN_FILE", "Local Bus Workers token file path supplied to child commands when unset.", ".bus/tokens/local-events.jwt"),
 				},
 			},
 		},
@@ -153,6 +157,20 @@ func envVar(name string, description string) map[string]interface{} {
 		"affects": []string{"dispatch"},
 		"scope":   "workspace",
 	}
+}
+
+// envVarDefault describes a dispatcher-provided default that can still be overridden.
+// Used by: metadataDocument for Bus client environment defaults.
+func envVarDefault(name string, description string, defaultValue string) map[string]interface{} {
+	item := envVar(name, description)
+	item["default"] = defaultValue
+	item["source"] = "dispatcher default"
+	item["safeHandling"] = map[string]interface{}{
+		"printable":     true,
+		"storeInDotenv": false,
+		"redactInLogs":  false,
+	}
+	return item
 }
 
 func metadataTextHelp() string {

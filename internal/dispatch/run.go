@@ -24,6 +24,22 @@ import (
 
 const version = "dev"
 
+// defaultEnvEntry describes a non-secret dispatcher-provided environment default.
+// Used by: applyDispatcherDefaultEnv after .env loading.
+type defaultEnvEntry struct {
+	key   string
+	value string
+}
+
+// dispatcherDefaultEnv contains standard local Bus defaults supplied to child commands.
+// Used by: applyDispatcherDefaultEnv for normal dispatch and busfile execution.
+var dispatcherDefaultEnv = []defaultEnvEntry{
+	{key: "BUS_EVENTS_API_URL", value: "http://127.0.0.1:8081/local/v1"},
+	{key: "BUS_EVENTS_TOKEN_FILE", value: ".bus/tokens/local-events.jwt"},
+	{key: "BUS_WORKERS_API_URL", value: "http://127.0.0.1:8090/local/v1"},
+	{key: "BUS_WORKERS_API_TOKEN_FILE", value: ".bus/tokens/local-events.jwt"},
+}
+
 // Run dispatches to a "bus-<command>" executable located on PATH.
 func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	busfileOpts, busfileMode, err := parseBusfileMode(args[1:])
@@ -37,6 +53,7 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 			fmt.Fprintf(stderr, "bus: failed to load .env: %v\n", err)
 			return 2
 		}
+		env = applyDispatcherDefaultEnv(env)
 		return runBusfiles(busfileOpts, env, stdin, stdout, stderr)
 	}
 
@@ -51,6 +68,7 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 		fmt.Fprintf(stderr, "bus: failed to load .env: %v\n", err)
 		return 2
 	}
+	env = applyDispatcherDefaultEnv(env)
 	if parsed.help {
 		writeHelp(env, stdout)
 		return 0
@@ -2507,6 +2525,29 @@ func overlayDotenvEnv(env []string, entries []dotenvEntry) []string {
 	out := append([]string{}, env...)
 	for _, key := range order {
 		out = append(out, key+"="+values[key])
+	}
+	return out
+}
+
+// applyDispatcherDefaultEnv appends standard defaults without replacing process or .env values.
+// Used by: Run after loadWorkingDirDotenv.
+func applyDispatcherDefaultEnv(env []string) []string {
+	existing := make(map[string]struct{}, len(env))
+	for _, entry := range env {
+		if eq := strings.Index(entry, "="); eq > 0 {
+			existing[entry[:eq]] = struct{}{}
+		}
+	}
+	out := append([]string{}, env...)
+	for _, item := range dispatcherDefaultEnv {
+		if item.key == "" || item.value == "" {
+			continue
+		}
+		if _, ok := existing[item.key]; ok {
+			continue
+		}
+		out = append(out, item.key+"="+item.value)
+		existing[item.key] = struct{}{}
 	}
 	return out
 }

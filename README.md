@@ -40,7 +40,7 @@ bus accounts summary --month=2026-01
 ```
 
 This resolves and runs `bus-accounts` from `PATH`, passing through arguments,
-stdin, stdout, stderr, and environment unchanged.
+stdin, stdout, stderr, and the prepared child environment.
 
 Before dispatch, `bus` reads `.env` from the effective working directory when
 that file exists. Values are added to the child command environment, but
@@ -48,6 +48,20 @@ variables already present in the process environment keep their existing values.
 Use `KEY=VALUE` or `export KEY=VALUE` lines; blank lines and `#` comments are
 ignored. The dispatcher does not filter names to Bus-specific variables; any
 valid environment variable name is passed through to the child command.
+
+After `.env` loading, `bus` supplies standard non-secret local client defaults
+for child commands when they are otherwise unset:
+
+```sh
+BUS_EVENTS_API_URL=http://127.0.0.1:8081/local/v1
+BUS_EVENTS_TOKEN_FILE=.bus/tokens/local-events.jwt
+BUS_WORKERS_API_URL=http://127.0.0.1:8090/local/v1
+BUS_WORKERS_API_TOKEN_FILE=.bus/tokens/local-events.jwt
+```
+
+These are runtime defaults, not `.env` entries. Override them only when a
+workspace needs a non-standard local endpoint, token path, or remote service.
+Precedence is process environment, then `.env`, then dispatcher defaults.
 
 Nested command families still dispatch to the first command word owner. For
 example:

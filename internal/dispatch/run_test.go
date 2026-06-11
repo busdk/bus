@@ -364,6 +364,66 @@ func TestRunLoadsDotenvForDispatchedCommand(t *testing.T) {
 	})
 }
 
+func TestRunAddsLocalClientDefaultsForDispatchedCommand(t *testing.T) {
+	tempDir := t.TempDir()
+	buildFakeEnvSubcommand(t, tempDir, "env")
+	workspace := t.TempDir()
+	env := prependPath(os.Environ(), tempDir)
+
+	withChdir(t, workspace, func() {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus", "env", "BUS_EVENTS_API_URL", "BUS_EVENTS_TOKEN_FILE", "BUS_WORKERS_API_URL", "BUS_WORKERS_API_TOKEN_FILE"}, env, nil, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+		}
+		want := strings.Join([]string{
+			"BUS_EVENTS_API_URL=http://127.0.0.1:8081/local/v1",
+			"BUS_EVENTS_TOKEN_FILE=.bus/tokens/local-events.jwt",
+			"BUS_WORKERS_API_URL=http://127.0.0.1:8090/local/v1",
+			"BUS_WORKERS_API_TOKEN_FILE=.bus/tokens/local-events.jwt",
+			"",
+		}, "\n")
+		if stdout.String() != want {
+			t.Fatalf("unexpected default env output:\nwant %q\ngot  %q", want, stdout.String())
+		}
+	})
+}
+
+func TestRunLocalClientDefaultsPreserveProcessAndDotenvValues(t *testing.T) {
+	tempDir := t.TempDir()
+	buildFakeEnvSubcommand(t, tempDir, "env")
+	workspace := t.TempDir()
+	dotenv := strings.Join([]string{
+		"BUS_EVENTS_API_URL=https://events.example.test/local/v1",
+		"BUS_EVENTS_TOKEN_FILE=/workspace/events.token",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(workspace, ".env"), []byte(dotenv), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	env := prependPath(os.Environ(), tempDir)
+	env = setEnv(env, "BUS_WORKERS_API_URL", "https://workers.example.test/local/v1")
+
+	withChdir(t, workspace, func() {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := dispatch.Run([]string{"bus", "env", "BUS_EVENTS_API_URL", "BUS_EVENTS_TOKEN_FILE", "BUS_WORKERS_API_URL", "BUS_WORKERS_API_TOKEN_FILE"}, env, nil, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("expected exit code 0, got %d (stderr: %q)", code, stderr.String())
+		}
+		want := strings.Join([]string{
+			"BUS_EVENTS_API_URL=https://events.example.test/local/v1",
+			"BUS_EVENTS_TOKEN_FILE=/workspace/events.token",
+			"BUS_WORKERS_API_URL=https://workers.example.test/local/v1",
+			"BUS_WORKERS_API_TOKEN_FILE=.bus/tokens/local-events.jwt",
+			"",
+		}, "\n")
+		if stdout.String() != want {
+			t.Fatalf("unexpected default precedence output:\nwant %q\ngot  %q", want, stdout.String())
+		}
+	})
+}
+
 func TestRunLoadsDotenvFromChdirDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	buildFakeEnvSubcommand(t, tempDir, "env")
