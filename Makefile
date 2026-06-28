@@ -78,6 +78,7 @@ BUILD_STATIC_LDFLAGS :=
 endif
 BUILD_VERSION ?= $(shell git describe --tags --long --always --dirty 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || printf dev)
 BUILD_VERSION_LDFLAGS ?= -X bus/internal/dispatch.Version=$(BUILD_VERSION)
+BUILD_VERSION_DEPS := $(shell git rev-parse --git-path HEAD 2>/dev/null) $(shell git rev-parse --git-path index 2>/dev/null)
 BUILD_LDFLAGS_COMBINED := $(strip $(BUILD_LDFLAGS) $(BUILD_VERSION_LDFLAGS) $(BUILD_STATIC_LDFLAGS))
 ifneq ($(strip $(BUILD_LDFLAGS_COMBINED)),)
 BUILD_LDFLAGS_ARG := -ldflags '$(BUILD_LDFLAGS_COMBINED)'
@@ -135,7 +136,7 @@ endif
 
 build: ./bin/$(BINARY) $(WASM_STAMP)
 
-./bin/$(BINARY): $(GO_FILES) $(GO_DEPS) $(MODULE_BIN_EXISTING_DEP_PATHS) $(BUILD_SRC_DEPS) $(WASM_STAMP)
+./bin/$(BINARY): $(GO_FILES) $(GO_DEPS) $(MODULE_BIN_EXISTING_DEP_PATHS) $(BUILD_SRC_DEPS) $(WASM_STAMP) $(BUILD_VERSION_DEPS)
 	mkdir -p ./bin
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(BUILD_TRIMPATH_ARG) $(BUILD_VCS_ARG) $(BUILD_LDFLAGS_ARG) $(BUILD_TAGS_ARG) -o ./bin/$(BINARY) $(CMD_PKG)
 
