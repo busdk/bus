@@ -22,7 +22,9 @@ import (
 	"github.com/busdk/bus-help/pkg/diagnostics"
 )
 
-const version = "dev"
+// Version is overridden by module builds with the owning repository's
+// `git describe --tags --long --always --dirty` value.
+var Version = "dev"
 
 // defaultEnvEntry describes a non-secret dispatcher-provided environment default.
 // Used by: applyDispatcherDefaultEnv after .env loading.
@@ -74,7 +76,7 @@ func Run(args []string, env []string, stdin io.Reader, stdout io.Writer, stderr 
 		return 0
 	}
 	if parsed.version {
-		fmt.Fprintf(stdout, "bus %s\n", version)
+		fmt.Fprintf(stdout, "bus %s\n", Version)
 		return 0
 	}
 	if _, err := parsed.globals.diagnosticLevel(); err != nil {

@@ -59,8 +59,9 @@ grep -q '^Available commands:$' "$WS/help_global.out"
 grep -q '^  bus accounts \+Run bus-accounts from PATH$' "$WS/help_global.out"
 ! test -s "$WS/help_global.err"
 
+expected_bus_version="$(git -C "$ROOT_DIR" describe --tags --long --always --dirty 2>/dev/null || git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf dev)"
 PATH="$TEST_PATH" "$BIN" --version > "$WS/version_global.out" 2> "$WS/version_global.err"
-diff -u <(printf 'bus dev\n') "$WS/version_global.out"
+diff -u <(printf 'bus %s\n' "$expected_bus_version") "$WS/version_global.out"
 ! test -s "$WS/version_global.err"
 
 PATH="$TEST_PATH" "$BIN" -C / status --version > "$WS/global_chdir.out" 2> "$WS/global_chdir.err"

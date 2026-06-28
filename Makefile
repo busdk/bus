@@ -76,7 +76,9 @@ BUILD_STATIC_LDFLAGS := -extldflags "-static"
 else
 BUILD_STATIC_LDFLAGS :=
 endif
-BUILD_LDFLAGS_COMBINED := $(strip $(BUILD_LDFLAGS) $(BUILD_STATIC_LDFLAGS))
+BUILD_VERSION ?= $(shell git describe --tags --long --always --dirty 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || printf dev)
+BUILD_VERSION_LDFLAGS ?= -X bus/internal/dispatch.Version=$(BUILD_VERSION)
+BUILD_LDFLAGS_COMBINED := $(strip $(BUILD_LDFLAGS) $(BUILD_VERSION_LDFLAGS) $(BUILD_STATIC_LDFLAGS))
 ifneq ($(strip $(BUILD_LDFLAGS_COMBINED)),)
 BUILD_LDFLAGS_ARG := -ldflags '$(BUILD_LDFLAGS_COMBINED)'
 else

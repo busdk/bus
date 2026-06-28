@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"bus/internal/dispatch"
 )
 
 type openCLIDocument struct {
@@ -94,7 +96,7 @@ func metadataDocument() openCLIDocument {
 		OpenCLI: "0.1.0",
 		Info: openCLIInfo{
 			Title:       "bus",
-			Version:     "dev",
+			Version:     dispatch.Version,
 			Summary:     "Bus module dispatcher.",
 			Description: "Dispatches bus subcommands to module binaries without importing private module internals.",
 		},

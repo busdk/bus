@@ -160,7 +160,9 @@ func TestRunGlobalHelpShortCircuits(t *testing.T) {
 }
 
 func TestRunGlobalVersionShortCircuits(t *testing.T) {
-	t.Parallel()
+	oldVersion := dispatch.Version
+	dispatch.Version = "test-version"
+	t.Cleanup(func() { dispatch.Version = oldVersion })
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -172,8 +174,8 @@ func TestRunGlobalVersionShortCircuits(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("expected no stderr, got %q", stderr.String())
 	}
-	if stdout.String() != "bus dev\n" {
-		t.Fatalf("expected version output %q, got %q", "bus dev\n", stdout.String())
+	if stdout.String() != "bus test-version\n" {
+		t.Fatalf("expected version output %q, got %q", "bus test-version\n", stdout.String())
 	}
 }
 
